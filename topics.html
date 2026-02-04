@@ -1,0 +1,470 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h3 class="m-0">主题管理 <small class="text-muted fs-6">(共 {{ pagination.total }} 条)</small></h3>
+    <div>
+        <button type="button" class="btn btn-danger btn-sm me-1" id="btnBatchDelete" onclick="submitBatchDelete()" disabled>
+            <i class="bi bi-trash"></i> 批量删除 <span id="selectCountText"></span>
+        </button>
+        <button type="button" class="btn btn-outline-success btn-sm me-1" data-bs-toggle="modal" data-bs-target="#importModal">
+            <i class="bi bi-file-earmark-excel"></i> 批量导入主题
+        </button>
+        <a href="{{ url_for('edit_topic', id=0) }}" class="btn btn-primary btn-sm">
+            <i class="bi bi-plus-lg"></i> 新增主题
+        </a>
+    </div>
+</div>
+
+<div class="card bg-light mb-3">
+    <div class="card-body py-2">
+        <form action="{{ url_for('topics') }}" method="get" class="row g-2 align-items-center">
+            <!-- 一级主题下拉框 -->
+            <div class="col-auto">
+                <select name="parent" id="level1_select" class="form-select form-select-sm" onchange="handleTopicChange('level1')">
+                    <option value="">-- 所有一级主题 --</option>
+                    {% for p in all_parents %}
+                    <option value="{{ p }}" {% if request.args.get('parent') == p %}selected{% endif %}>{{ p }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <!-- 二级主题下拉框 -->
+            <div class="col-auto">
+                <select name="level2" id="level2_select" class="form-select form-select-sm" onchange="handleTopicChange('level2')">
+                    <option value="">-- 所有二级主题 --</option>
+                    {% for l2 in all_level2_list %}
+                    <option value="{{ l2 }}" {% if request.args.get('level2') == l2 %}selected{% endif %}>{{ l2 }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <!-- 主题名称下拉框 -->
+            <div class="col-auto">
+                <select name="name" id="topic_name_select" class="form-select form-select-sm" onchange="handleTopicChange('name')">
+                    <option value="">-- 所有主题名称 --</option>
+                    {% for t_name in all_topic_names %}
+                    <option value="{{ t_name }}" {% if request.args.get('name') == t_name %}selected{% endif %}>{{ t_name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div class="col-auto">
+                <select name="owner" class="form-select form-select-sm">
+                    <option value="">-- 所有负责人 --</option>
+                    {% for owner in all_owners %}
+                        <option value="{{ owner }}" {% if request.args.get('owner') == owner %}selected{% endif %}>
+                            {{ owner }}
+                        </option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div class="col-auto">
+                <button type="submit" class="btn btn-sm btn-secondary">🔍 搜索</button>
+                <a href="{{ url_for('topics') }}" class="btn btn-sm btn-outline-secondary" onclick="resetFilters()">重置</a>
+            </div>
+        </form>
+    </div>
+</div>
+
+<form id="batchForm" action="{{ url_for('batch_delete_topics') }}" method="post">
+    <div class="table-responsive">
+        <table class="table table-bordered table-hover align-middle">
+            <thead class="table-light">
+                <tr>
+                    <th style="width: 40px;" class="text-center"><input type="checkbox" class="form-check-input" id="selectAll"></th>
+                    <th>序号</th>
+                    <th>一级主题</th>
+                    <th>二级主题</th>
+                    <th>主题名称</th>
+                    <th>采集方式</th>
+                    <th>采集频率</th>
+                    <th>负责人</th>
+                    <th style="width: 150px;">操作</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for t in pagination.items %}
+                <tr>
+                    <td class="text-center"><input type="checkbox" class="form-check-input item-checkbox" name="selected_ids" value="{{ t.id }}"></td>
+                    <td>{{ (pagination.page - 1) * pagination.per_page + loop.index }}</td>
+                    <td>{{ t.level1_id }}</td>
+                    <td>{{ t.level2_id }}</td>
+                    <td>
+                        {{ t.name }}<i class="small text-muted"> {{ t.theme_id }}</i>
+                    </td>
+
+                    <td>
+                    {% if t.method %}
+                        {% for m in t.method.split(',') %}
+                            {% if m == '程序采集' %}
+                                <span class=" text-primary ">{{ m }}</span>
+                            {% elif m == '人工采集' %}
+                                <span class=" text-success ">{{ m }}</span>
+                            {% else %}
+                                <span class=" text-primary ">{{ m }}</span>
+                            {% endif %}
+                        {% endfor %}
+                    {% else %}
+                        <span class="text-muted small">-</span>
+                    {% endif %}
+                    </td>
+                    <td>
+                      {% if t.frequency %}
+                          <span class=" text-dark ">{{ t.frequency }}</span>
+                      {% else %}
+                          <span class="text-muted small">-</span>
+                      {% endif %}
+                    </td>
+                    <td>
+                        {% if t.owner and t.owner.strip() %}
+                            {{ t.owner }}
+                        {% else %}
+                         <!-- (未指定负责人) -->
+                        {% endif %}
+                    </td>
+                    <td>
+                        <div class="btn-group" role="group">
+                            <a href="{{ url_for('edit_topic', id=t.id) }}" class="btn btn-sm btn-outline-primary">编辑</a>
+                            <a href="{{ url_for('delete_topic', id=t.id) }}" class="btn btn-sm btn-outline-danger" onclick="return confirm('确定要删除吗？');">删除</a>
+                        </div>
+                    </td>
+                </tr>
+                {% else %}
+                <tr><td colspan="10" class="text-center text-muted">暂无数据</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</form>
+
+<nav aria-label="Page navigation" class="mt-4">
+    <div class="d-flex justify-content-center align-items-center flex-wrap gap-3">
+        <ul class="pagination mb-0">
+            {% if pagination.has_prev %}
+                <li class="page-item">
+                    <a class="page-link" href="{{ url_for('topics', page=pagination.prev_num, name=request.args.get('name', ''), owner=request.args.get('owner', ''), parent=request.args.get('parent', ''), level2_id=request.args.get('level2_id', ''),level2_select=s_level2_select,owner_select=s_owner_select)}}">
+                        <i class="bi bi-chevron-left"></i> 上一页
+                    </a>
+                </li>
+            {% else %}
+                <li class="page-item disabled"><span class="page-link"><i class="bi bi-chevron-left"></i> 上一页</span></li>
+            {% endif %}
+
+            <li class="page-item active">
+                <span class="page-link">第 {{ pagination.page }} 页 / 共 {{ pagination.pages }} 页</span>
+            </li>
+
+            {% if pagination.has_next %}
+                <li class="page-item">
+                    <a class="page-link" href="{{ url_for('topics', page=pagination.next_num, name=request.args.get('name', ''), owner=request.args.get('owner', ''), parent=request.args.get('parent', ''), level2_id=request.args.get('level2_id', ''),level2_select=s_level2_select,owner_select=s_owner_select) }}">
+                        下一页 <i class="bi bi-chevron-right"></i>
+                    </a>
+                </li>
+            {% else %}
+                <li class="page-item disabled"><span class="page-link">下一页 <i class="bi bi-chevron-right"></i></span></li>
+            {% endif %}
+        </ul>
+
+        <div class="d-flex align-items-center">
+            <span class="me-2 text-muted small">跳转至</span>
+            <input type="number" id="jumpPageInput" class="form-control form-control-sm text-center" style="width: 60px;" min="1" max="{{ pagination.pages }}" value="{{ pagination.page }}">
+            <span class="ms-2 me-2 text-muted small">页</span>
+            <button class="btn btn-sm btn-outline-secondary" onclick="jumpToPage()">确定</button>
+        </div>
+    </div>
+</nav>
+<!---导入主题模态框--->
+<div class="modal fade" id="importModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-xl"> <div class="modal-content">
+            <div class="modal-header bg-success text-white">
+                <h5 class="modal-title"><i class="bi bi-file-earmark-excel-fill me-2"></i>批量导入主题</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+
+            <form action="{{ url_for('import_topic_excel') }}" method="post" enctype="multipart/form-data">
+                <div class="modal-body p-4">
+                    <div class="row g-4">
+
+                        <div class="col-lg-5">
+                            <div class="card h-100 border-0 bg-light">
+                                <div class="card-body">
+                                    <h6 class="fw-bold text-success mb-3">
+                                        <i class="bi bi-list-check me-1"></i> 第一步：检查数据规范
+                                    </h6>
+                                    <ul class="list-group list-group-flush bg-transparent small">
+                                        <li class="list-group-item bg-transparent px-0">
+                                            <span class="badge bg-danger me-2">必填</span>
+                                            <strong>一级主题、二级主题、主题ID、主题名称、负责人</strong>
+                                        </li>
+                                        <li class="list-group-item bg-transparent px-0">
+                                            <span class="badge bg-secondary me-2">选填</span>
+                                            采集频率、采集方式
+                                        </li>
+                                        <li class="list-group-item bg-transparent px-0">
+                                            <i class="bi bi-info-circle-fill text-primary me-1"></i>
+                                            <strong>负责人：</strong>若为空，系统自动填充为“(未指定负责人)”
+                                        </li>
+                                        <li class="list-group-item bg-transparent px-0">
+                                            <i class="bi bi-info-circle-fill text-primary me-1"></i>
+                                            <strong>采集方式：</strong>需包含“程序”或“人工”关键词
+                                        </li>
+                                    </ul>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="col-lg-7">
+                            <div class="border rounded p-3 h-100">
+                                <div class="d-flex justify-content-between align-items-center mb-3">
+                                    <h6 class="fw-bold text-primary m-0">
+                                        <i class="bi bi-table me-1"></i> 模板格式预览
+                                    </h6>
+                                    <a href="{{ url_for('download_topic_template') }}" class="btn btn-sm btn-outline-primary">
+                                        <i class="bi bi-download me-1"></i> 下载标准 Excel 模板
+                                    </a>
+                                </div>
+
+                                <div class="table-responsive border rounded bg-white" style="font-size: 12px;">
+                                    <table class="table table-bordered table-sm mb-0 text-center text-nowrap">
+                                        <thead class="table-light">
+                                            <tr>
+                                                <th class="text-danger">一级主题*</th>
+                                                <th class="text-danger">二级主题*</th>
+                                                <th class="text-danger">主题ID*</th>
+                                                <th class="text-danger">主题名称*</th>
+                                                <th>采集方式</th>
+                                                <th>采集频率</th>
+                                                <th class="text-danger">负责人*</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            <tr>
+                                                <td>社会建设</td>
+                                                <td>教育文化</td>
+                                                <td>A001</td>
+                                                <td>科研数据</td>
+                                                <td>程序采集</td>
+                                                <td>月</td>
+                                                <td>张三</td>
+                                            </tr>
+                                            <tr>
+                                                <td class="text-muted">...</td>
+                                                <td class="text-muted">...</td>
+                                                <td class="text-muted">...</td>
+                                                <td class="text-muted">...</td>
+                                                <td class="text-muted">...</td>
+                                                <td class="text-muted">...</td>
+                                            </tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                                <div class="form-text mt-2 text-muted">
+                                    <small>* 红色标题为必须存在的列名，请勿修改模板表头。</small>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <hr class="my-4">
+
+                    <div class="row justify-content-center">
+                        <div class="col-lg-8 text-center">
+                            <h6 class="fw-bold mb-3">第二步：上传填写好的文件</h6>
+                            <div class="input-group input-group-lg">
+                                <input type="file" class="form-control" name="file" accept=".xlsx, .xls" required>
+                                <button type="submit" class="btn btn-success ">
+                                    <i class="bi bi-cloud-upload-fill me-1"></i> 确认导入
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+<script>
+    // --- 分页跳转 ---
+    function jumpToPage() {
+        const pageNum = document.getElementById('jumpPageInput').value;
+        const maxPage = {{ pagination.pages }};
+        if (pageNum >= 1 && pageNum <= maxPage) {
+            const url = new URL(window.location.href);
+            url.searchParams.set('page', pageNum);
+            window.location.href = url.pathname + url.search;
+        } else { alert(`请输入 1 到 ${maxPage} 之间的页码`); }
+    }
+    document.getElementById('jumpPageInput').addEventListener('keypress', function (e) {
+        if (e.key === 'Enter') jumpToPage();
+    });
+
+    // --- 批量删除逻辑 ---
+    function submitBatchDelete() {
+        var len = document.querySelectorAll('.item-checkbox:checked').length;
+        if (len === 0) { alert('请至少选择一项！'); return; }
+        if (confirm('确定要批量删除选中的 ' + len + ' 项吗？')) {
+            document.getElementById('batchForm').submit();
+        }
+    }
+
+    // --- 全选与按钮联动 ---
+    document.addEventListener('DOMContentLoaded', function() {
+        const selectAllCheckbox = document.getElementById('selectAll');
+        const itemCheckboxes = document.querySelectorAll('.item-checkbox');
+        const btnBatchDelete = document.getElementById('btnBatchDelete');
+        const selectCountText = document.getElementById('selectCountText');
+
+        // 更新按钮状态
+        function updateBatchButton() {
+            const checkedCount = document.querySelectorAll('.item-checkbox:checked').length;
+            if (checkedCount > 0) {
+                btnBatchDelete.disabled = false;
+                selectCountText.innerText = '(' + checkedCount + ')';
+            } else {
+                btnBatchDelete.disabled = true;
+                selectCountText.innerText = '';
+            }
+        }
+
+        // 全选事件
+        if (selectAllCheckbox) {
+            selectAllCheckbox.addEventListener('change', function() {
+                const isChecked = this.checked;
+                itemCheckboxes.forEach(cb => cb.checked = isChecked);
+                updateBatchButton();
+            });
+        }
+
+        // 单选事件
+        itemCheckboxes.forEach(cb => {
+            cb.addEventListener('change', function() {
+                updateBatchButton();
+                if (!this.checked && selectAllCheckbox) selectAllCheckbox.checked = false;
+            });
+        });
+
+        // --- 页面加载时执行一次联动筛选 ---
+        initTopicFilters();
+    });
+
+    // --- 三级联动筛选逻辑 ---
+
+    // 关键修复 1: 使用统一的数据变量名，避免重复
+    const topicRelationsData = {{ topic_relations | tojson }};
+
+    // 关键修复 2: 备份原始选项
+    let originalOptions = {
+        level1: [],
+        level2: [],
+        names: []
+    };
+
+    // 关键修复 3: 初始化函数，只定义一次
+    function initTopicFilters() {
+        // 备份原始选项
+        document.querySelectorAll('#level1_select option').forEach(opt => {
+            if (opt.value) originalOptions.level1.push({value: opt.value, text: opt.text});
+        });
+        document.querySelectorAll('#level2_select option').forEach(opt => {
+            if (opt.value) originalOptions.level2.push({value: opt.value, text: opt.text});
+        });
+        document.querySelectorAll('#topic_name_select option').forEach(opt => {
+            if (opt.value) originalOptions.names.push({value: opt.value, text: opt.text});
+        });
+
+        // 根据URL中的参数初始化筛选
+        const currentLevel1 = document.getElementById('level1_select').value;
+        const currentLevel2 = document.getElementById('level2_select').value;
+        const currentName = document.getElementById('topic_name_select').value;
+
+        // 如果一级主题有值，触发一级主题变化
+        if (currentLevel1) {
+            handleTopicChange('level1');
+        }
+        // 否则如果二级主题有值，触发二级主题变化
+        else if (currentLevel2) {
+            handleTopicChange('level2');
+        }
+        // 否则如果主题名称有值，触发主题名称变化
+        else if (currentName) {
+            handleTopicChange('name');
+        }
+    }
+
+    // 关键修复 4: 核心联动函数，处理三级联动
+    function handleTopicChange(source) {
+        const el1 = document.getElementById('level1_select');
+        const el2 = document.getElementById('level2_select');
+        const elN = document.getElementById('topic_name_select');
+
+        // 获取当前各下拉框的值
+        const val1 = el1.value;
+        const val2 = el2.value;
+        const valN = elN.value;
+
+        // 定义过滤后的数据集，初始为全部数据
+        let filtered = topicRelationsData;
+
+        // 核心策略：以"最后操作"的那个下拉框为基准进行过滤
+        // 如果选了"全部/空"，则重置为全部数据
+        if (source === 'level1' && val1) {
+            filtered = topicRelationsData.filter(item => item.p === val1);
+        } else if (source === 'level2' && val2) {
+            filtered = topicRelationsData.filter(item => item.l2 === val2);
+        } else if (source === 'name' && valN) {
+            filtered = topicRelationsData.filter(item => item.n === valN);
+        }
+
+        // 计算出各列新的有效选项列表 (去重 + 排序)
+        const validL1 = [...new Set(filtered.map(item => item.p))].sort();
+        const validL2 = [...new Set(filtered.map(item => item.l2))].sort();
+        const validN  = [...new Set(filtered.map(item => item.n))].sort();
+
+        // 更新下拉框选项
+        // 注意：不要更新"触发者"自己，否则用户刚选的值会被刷掉
+        if (source !== 'level1') updateSelect(el1, validL1, val1);
+        if (source !== 'level2') updateSelect(el2, validL2, val2);
+        if (source !== 'name')   updateSelect(elN, validN, valN);
+
+        // 特殊优化：如果是非触发者，且过滤后只剩唯一的选项，自动选中它
+        if (source !== 'level1' && validL1.length === 1) el1.value = validL1[0];
+        if (source !== 'level2' && validL2.length === 1) el2.value = validL2[0];
+        if (source !== 'name'   && validN.length === 1)  elN.value = validN[0];
+    }
+
+    // 辅助函数：更新下拉框的 <option>
+    function updateSelect(selectEl, validItems, currentValue) {
+        // 保留第一项 "-- 所有 --"
+        const placeholder = selectEl.options[0].text;
+
+        // 重建 HTML
+        let html = `<option value="">${placeholder}</option>`;
+        validItems.forEach(item => {
+            if (item) { // 过滤掉 null/undefined
+                // 如果该项正好是之前选中的，保持选中状态；否则不选中
+                const isSelected = (item === currentValue) ? 'selected' : '';
+                html += `<option value="${item}" ${isSelected}>${item}</option>`;
+            }
+        });
+        selectEl.innerHTML = html;
+
+        // 如果旧值在新列表中不存在了（说明不匹配），则置空
+        if (currentValue && !validItems.includes(currentValue)) {
+            selectEl.value = "";
+        }
+    }
+
+    // 重置筛选器
+    function resetFilters() {
+        // 恢复所有原始选项
+        updateSelect(document.getElementById('level1_select'), originalOptions.level1.map(opt => opt.value), '');
+        updateSelect(document.getElementById('level2_select'), originalOptions.level2.map(opt => opt.value), '');
+        updateSelect(document.getElementById('topic_name_select'), originalOptions.names.map(opt => opt.value), '');
+
+        // 提交表单（重置搜索）
+        document.querySelector('form[action="{{ url_for("topics") }}"]').submit();
+    }
+</script>
+{% endblock %}

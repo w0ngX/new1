@@ -1,0 +1,1083 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3" xmlns="">
+    <h3 class="m-0">合同管理 <small class="text-muted fs-6">(共 {{ pagination.total }} 份)</small></h3>
+    <div>
+        <button type="button" class="btn btn-danger btn-sm me-1" id="btnBatchDelete" onclick="submitBatchDelete()" disabled>
+            <i class="bi bi-trash"></i> 批量删除 <span id="selectCountText"></span>
+        </button>
+
+        <button type="button" class="btn btn-outline-primary btn-sm me-1" id="btnExport" onclick="exportSelected()" disabled>
+            <i class="bi bi-download"></i> 导出选中 <span id="exportCountText"></span>
+        </button>
+        <!-- 在现有的导入按钮后面添加 -->
+        <button type="button" class="btn btn-outline-info btn-sm me-1" data-bs-toggle="modal" data-bs-target="#importBalanceModal">
+            <i class="bi bi-calculator"></i> 导入合同余额
+        </button>
+        <button type="button" class="btn btn-outline-success btn-sm me-1" data-bs-toggle="modal" data-bs-target="#importModal">
+            <i class="bi bi-file-earmark-excel"></i> 批量导入合同
+        </button>
+        <a href="{{ url_for('edit_contract', id=0) }}" class="btn btn-primary btn-sm">
+            <i class="bi bi-plus-lg"></i> 新增合同
+        </a>
+    </div>
+</div>
+
+
+<div class="card mb-3 shadow-sm border-0">
+    <div class="card-body py-2 d-flex justify-content-between align-items-center bg-light rounded-top">
+        <span class="text-success fw-bold">
+            <i class="bi bi-play-circle-fill"></i> 履约中: {{ active_count }} 份 ({{ active_percent }}%)
+        </span>
+        <span class="text-secondary fw-bold">
+            已结束: {{ ended_count }} 份 ({{ ended_percent }}%) <i class="bi bi-check-circle-fill"></i>
+        </span>
+    </div>
+    <div class="progress rounded-0 rounded-bottom" style="height: 20px;">
+        <div class="progress-bar bg-success" role="progressbar" style="width: {{ active_percent }}%"></div>
+        <div class="progress-bar bg-secondary" role="progressbar" style="width: {{ ended_percent }}%"></div>
+    </div>
+</div>
+
+<div class="card bg-light mb-3">
+    <div class="card-body py-2">
+        <form action="{{ url_for('contracts') }}" method="get" class="row g-2 align-items-center">
+            <div class="col-auto">
+                <input type="text" name="code" class="form-control form-control-sm" placeholder="合同编号" value="{{ request.args.get('code', '') }}">
+            </div>
+            <div class="col-auto">
+                <input type="text" name="name" class="form-control form-control-sm" placeholder="合同名称" value="{{ request.args.get('name', '') }}">
+            </div>
+            <div class="col-auto">
+                <select name="contract_type" class="form-select form-select-sm" value="{{ request.args.get('contract_type', '') }}">
+                    <option value="">--合同类型--</option>
+                    {% for t in type_options %}
+                        <option value="{{ t }}"
+                                {% if request.args.get('contract_type') == t %}selected{% endif %}>
+                            {{ t }}
+                        </option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-auto">
+                <input type="text" name="party_a" class="form-control form-control-sm" placeholder="甲方单位名称" value="{{ request.args.get('party_a', '') }}">
+            </div>
+            <div class="col-auto">
+                <input type="text" name="party_b" class="form-control form-control-sm" placeholder="乙方单位名称" value="{{ request.args.get('party_b', '') }}">
+            </div>
+
+            <div class="col-auto">
+                <!-- 年份下拉选择器：name 保持为 year 以兼容后端 request.args.get('year') -->
+                <select name="year" id="yearSelect" class="form-select form-select-sm" style="width: 110px;" value="{{ request.args.get('year', '') }}">
+                    <option value="">-- 所属年度 --</option>
+                    {# 选项由下面的 JavaScript 动态填充并回显 request.args.get('year') #}
+                </select>
+            </div>
+            <div class="col-auto">
+                <select name="status" class="form-select form-select-sm" onchange="this.form.submit()" value="{{ request.args.get('status', '') }}">
+                    <option value="">-- 执行状态 --</option>
+                    <option value="active" {% if request.args.get('status') == 'active' %}selected{% endif %}>履约中</option>
+                    <option value="ended" {% if request.args.get('status') == 'ended' %}selected{% endif %}>已结束</option>
+                </select>
+            </div>
+            <div class="col-auto">
+                <select name="pay_status" class="form-select form-select-sm" onchange="this.form.submit()" value="{{ request.args.get('pay_status', '') }}">
+                    <option value="">-- 结算状态 --</option>
+                    <option value="settled" {% if request.args.get('pay_status') == 'settled' %}selected{% endif %}>
+                        ✅ 已结清
+                    </option>
+                    <option value="unsettled" {% if request.args.get('pay_status') == 'unsettled' %}selected{% endif %}>
+                        ⏳ 未结清
+                    </option>
+                </select>
+            </div>
+            <div class="col-auto">
+                <button type="submit" class="btn btn-sm btn-secondary">🔍 搜索</button>
+                <a href="{{ url_for('contracts') }}" class="btn btn-sm btn-outline-secondary">重置</a>
+            </div>
+        </form>
+    </div>
+</div>
+
+<form id="batchForm" action="{{ url_for('batch_delete_contracts') }}" method="post">
+    <div class="table-responsive">
+        <table class="table table-bordered table-hover align-middle">
+            <thead class="table-light">
+                <tr>
+                    <th style="width: 40px;" class="text-center">
+                        <input type="checkbox" id="selectAll" onclick="handleSelectAll(this)">
+                    </th>
+                    <th style="width: 50px;">序号</th>
+                    <th>合同编号</th>
+                    <th>合同名称</th>
+                    <th>合同类型</th>
+                    <th>甲方单位</th>
+                    <th>乙方单位</th>
+                    <th>所属年度</th>
+                    <th>签约日期</th>
+                    <th>执行状态</th>
+                    <th>结算进度（余额/总金额）
+                        <style>
+                            /* 让金额列看起来像链接，鼠标悬停变色 */
+                            .clickable-amount {
+                                cursor: pointer;
+                                transition: all 0.2s;
+                                border-radius: 4px;
+                                padding: 4px 8px;
+                            }
+                            .clickable-amount:hover {
+                                background-color: #e9ecef; /* 浅灰色背景 */
+                                color: #0d6efd; /* 变蓝 */
+                            }
+                        </style>
+                    </th>
+                    <th>状态</th>
+                    <th>扫描件</th>
+                    <th style="width: 150px;">操作</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for c in pagination.items %}
+                    <tr>
+                        <td class="text-center">
+                            <input type="checkbox" class="item-checkbox" value="{{ c.id }}" onclick="handleSingleSelect(this)">
+                        </td>
+                        <td>{{ (pagination.page - 1) * pagination.per_page + loop.index }}</td>
+                        <td>{{ c.contract_code }}</td>
+                        <td title="{{ c.contract_code }}">{{ c.name }}
+
+                        </td>
+                        <td>
+                            <select class="form-select form-select-sm"
+                                    onchange="updateContractType({{ c.id }}, this.value)">
+                                <option value="">-- 请选择 --</option>
+                                {% for t in all_types %}
+                                <option value="{{ t }}" {% if c.contract_type == t %}selected{% endif %}>{{ t }}</option>
+                                {% endfor %}
+                            </select>
+                        </td>
+
+                        <td>{{ c.party_a }}
+
+                        </td>
+                        <td>{{ c.party_b }}</td>
+                        <td>{{ c.year or '-' }}</td>
+                        <td>{{ c.sign_date }}</td>
+                       <td>
+                            {% set is_manual = c.manual_status is not none %}
+
+                            {% if c.manual_status == 'active' %}
+                                {% set status_text = '履约中' %}
+                                {% set status_class = 'btn-success' %}
+                            {% elif c.manual_status == 'ended' %}
+                                {% set status_text = '已结束' %}
+                                {% set status_class = 'btn-secondary' %}
+                            {% else %}
+                                {% if c.end_date and c.end_date >= today %}
+                                    {% set status_text = '履约中' %}
+                                    {% set status_class = 'btn-outline-success' %}
+                                {% else %}
+                                    {% set status_text = '已结束' %}
+                                    {% set status_class = 'btn-outline-secondary' %}
+                                {% endif %}
+                            {% endif %}
+
+                            <div class="dropdown">
+                                <button class="btn {{ status_class }} btn-sm dropdown-toggle py-0" type="button" data-bs-toggle="dropdown" aria-expanded="false" style="font-size: 0.85rem;">
+                                    {{ status_text }}
+                                </button>
+                                <ul class="dropdown-menu">
+                                    <li><a class="dropdown-item" href="javascript:void(0)" onclick="setStatus({{ c.id }}, 'active')">🟢 设为：履约中</a></li>
+                                    <li><a class="dropdown-item" href="javascript:void(0)" onclick="setStatus({{ c.id }}, 'ended')">⚫ 设为：已结束</a></li>
+                                    <li><hr class="dropdown-divider"></li>
+                                    <li><a class="dropdown-item" href="javascript:void(0)" onclick="setStatus({{ c.id }}, 'auto')">🔄 恢复至2023/1/1</a></li>
+                                </ul>
+                            </div>
+                        </td>
+                        <td>
+                            <div class="clickable-amount d-flex flex-column"
+                                 onclick="openDeliveryModal({{ c.id }}, {{ c.amount }})"
+                                 title="点击管理支付记录">
+
+                                <span class="fw-bold text-blue">
+                                        <!-- 显示：已支付金额 / 总金额 -->
+                                    ¥{{ "{:,.2f}".format(c.balance) }}/{{ "{:,.2f}".format(c.amount) }}
+                                </span>
+                            </div>
+                        </td>
+                            <td>
+                                {% if c.is_settled %}
+                                    <span class="badge bg-success bg-opacity-10 text-success px-3 py-2 rounded-pill">
+                                        <i class="bi bi-check-circle-fill me-1"></i> 已结清
+                                    </span>
+                                {% else %}
+                                    <span class="badge bg-warning bg-opacity-10 text-dark px-3 py-2 rounded-pill">
+                                        <i class="bi bi-hourglass-split me-1"></i> 未结清
+                                        <small class="d-block text-muted">已结算: ¥{{ "{:,.2f}".format(c.paid_amount) }}</small>
+                                    </span>
+
+                                {% endif %}
+                            </td>
+                        <td>
+                            {% if c.scan_file %}
+                                {% if c.scan_file.startswith('http') %}
+                                    <a href="{{ c.scan_file }}" target="_blank" class="btn btn-sm btn-outline-info">
+                                        <i class="bi bi-link-45deg"></i> 链接
+                                    </a>
+                                {% else %}
+                                    <a href="{{ url_for('uploaded_file', filename=c.scan_file) }}" target="_blank" class="btn btn-sm btn-outline-primary">
+                                        <i class="bi bi-file-earmark-pdf"></i> 文件
+                                    </a>
+                                {% endif %}
+                            {% else %}
+                                <span class="text-muted small">无</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <div class="btn-group" role="group">
+                                <a href="{{ url_for('edit_contract', id=c.id) }}" class="btn btn-sm btn-outline-primary">编辑</a>
+                                <a href="{{ url_for('delete_contract', id=c.id) }}" class="btn btn-sm btn-outline-danger" onclick="return confirm('确定要删除吗？');">删除</a>
+                            </div>
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr><td colspan="10" class="text-center text-muted">没有数据</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</form>
+
+{% if pagination.pages > 1 %}
+<nav aria-label="Page navigation" class="mt-4">
+    <ul class="pagination justify-content-center">
+        <li class="page-item {% if not pagination.has_prev %}disabled{% endif %}">
+            <a class="page-link"
+               href="{{ url_for('contracts', page=pagination.prev_num,
+                                code=request.args.get('code', ''),
+                                name=request.args.get('name', ''),
+                                party_a=request.args.get('party_a', ''),
+                                party_b=request.args.get('party_b', ''),
+                                year=request.args.get('year', ''),
+                                pay_status=request.args.get('pay_status', ''),
+                                status=request.args.get('status', ''),
+                                contract_type=request.args.get('contract_type', '')) }}"
+               aria-label="Previous">
+                <span aria-hidden="true">&laquo;</span>
+            </a>
+        </li>
+
+        {% for p in pagination.iter_pages(left_edge=1, right_edge=1, left_current=2, right_current=2) %}
+            {% if p %}
+                <li class="page-item {% if p == pagination.page %}active{% endif %}">
+                    <a class="page-link"
+                       href="{{ url_for('contracts', page=p,
+                                        code=request.args.get('code', ''),
+                                        name=request.args.get('name', ''),
+                                        party_a=request.args.get('party_a', ''),
+                                        party_b=request.args.get('party_b', ''),
+                                        year=request.args.get('year', ''),
+                                        pay_status=request.args.get('pay_status', ''),
+                                        status=request.args.get('status', ''),
+                                        contract_type=request.args.get('contract_type', '')) }}">
+                        {{ p }}
+                    </a>
+                </li>
+            {% else %}
+                <li class="page-item disabled"><span class="page-link">...</span></li>
+            {% endif %}
+        {% endfor %}
+
+        <li class="page-item {% if not pagination.has_next %}disabled{% endif %}">
+            <a class="page-link"
+               href="{{ url_for('contracts', page=pagination.next_num,
+                                code=request.args.get('code', ''),
+                                name=request.args.get('name', ''),
+                                party_a=request.args.get('party_a', ''),
+                                party_b=request.args.get('party_b', ''),
+                                year=request.args.get('year', ''),
+                                pay_status=request.args.get('pay_status', ''),
+                                status=request.args.get('status', ''),
+                                contract_type=request.args.get('contract_type', '')) }}"
+               aria-label="Next">
+                <span aria-hidden="true">&raquo;</span>
+            </a>
+        </li>
+    </ul>
+</nav>
+{% endif %}
+<script>
+    function jumpToPage() {
+        const pageNum = document.getElementById('jumpPageInput').value;
+        const maxPage = {{ pagination.pages }};
+
+        if (pageNum >= 1 && pageNum <= maxPage) {
+            // 获取当前搜索参数，确保跳转时搜索条件不丢失
+            const url = new URL(window.location.href);
+            url.searchParams.set('page', pageNum);
+            window.location.href = url.pathname + url.search;
+        } else {
+            alert(`请输入 1 到 ${maxPage} 之间的页码`);
+        }
+    }
+
+    // 支持回车键跳转
+    document.getElementById('jumpPageInput').addEventListener('keypress', function (e) {
+        if (e.key === 'Enter') {
+            jumpToPage();
+        }
+    });
+</script>
+
+<div class="modal fade" id="deliveryModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header bg-light">
+                <h5 class="modal-title" id="deliveryModalTitle">交付进度管理</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="deliveryForm" class="row g-3 mb-4 p-3 border rounded bg-white">
+                    <input type="hidden" id="modal_contract_id">
+                    <div class="col-md-4">
+                        <label class="form-label small">交付时间</label>
+                        <input type="date" class="form-control form-control-sm" id="del_date" required value="{{ today }}">
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label small">交付金额 (元)</label>
+                        <input type="number" step="0.01" class="form-control form-control-sm" id="del_amount" required>
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label small">备注</label>
+                        <input type="text" class="form-control form-control-sm" id="del_unit">
+                    </div>
+                    <div class="col-12 text-end">
+                        <button type="button" class="btn btn-primary btn-sm" onclick="submitDelivery()">确认提交交付</button>
+                    </div>
+                </form>
+                <h6>交付历史明细</h6>
+                <div class="table-responsive">
+                    <table class="table table-sm table-striped">
+                        <thead>
+                            <tr>
+                                <th>交付时间</th>
+                                <th>交付金额</th>
+                                <th>备注</th>
+                                <th style="width: 60px;"></th>
+                            </tr>
+                        </thead>
+                        <tbody id="deliveryHistoryBody"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+<!-- 在文件末尾，现有的导入模态框之后添加新的模态框 -->
+
+<!-- 导入合同余额Excel模态框 -->
+<div class="modal fade" id="importBalanceModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-xl">
+        <div class="modal-content">
+            <div class="modal-header bg-info text-white">
+                <h5 class="modal-title"><i class="bi bi-calculator me-2"></i>批量导入合同余额 (支付记录)</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+
+            <form action="{{ url_for('import_balance_excel') }}" method="post" enctype="multipart/form-data" id="importBalanceForm">
+                <div class="modal-body p-4">
+                    <div class="row g-4">
+
+                        <div class="col-lg-5">
+                            <div class="card h-100 border-0 bg-light">
+                                <div class="card-body">
+                                    <h6 class="fw-bold text-info mb-3">
+                                        <i class="bi bi-info-circle-fill me-1"></i> 匹配与导入规则
+                                    </h6>
+                                    <ul class="list-group list-group-flush bg-transparent small">
+                                        <li class="list-group-item bg-transparent px-0">
+                                            <span class="badge bg-danger me-2">必填</span>
+                                            <strong>合同编号、支付金额、支付时间</strong>
+                                        </li>
+                                        <li class="list-group-item bg-transparent px-0">
+                                            <span class="badge bg-secondary me-2">选填</span>
+                                            备注
+                                        </li>
+                                        <li class="list-group-item bg-transparent px-0">
+                                            <i class="bi bi-magic text-primary me-1"></i>
+                                            <strong>智能匹配：</strong>系统优先匹配“合同编号”；若编号不存在，尝试匹配“合同名称”。
+                                        </li>
+                                        <li class="list-group-item bg-transparent px-0">
+                                            <i class="bi bi-shield-check text-success me-1"></i>
+                                            <strong>自动查重：</strong>相同的“合同+日期+金额”记录会自动跳过，防止重复导入。
+                                        </li>
+                                    </ul>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="col-lg-7">
+                            <div class="border rounded p-3 h-100">
+                                <div class="d-flex justify-content-between align-items-center mb-3">
+                                    <h6 class="fw-bold text-primary m-0">
+                                        <i class="bi bi-table me-1"></i> 模板格式预览
+                                    </h6>
+                                    <a href="{{ url_for('download_balance_template') }}" class="btn btn-sm btn-outline-info">
+                                        <i class="bi bi-download me-1"></i> 下载标准 Excel 模板
+                                    </a>
+                                </div>
+
+                                <div class="table-responsive border rounded bg-white" style="font-size: 12px;">
+                                    <table class="table table-bordered table-sm mb-0 text-center text-nowrap">
+                                        <thead class="table-light">
+                                            <tr>
+                                                <th class="text-danger">合同编号*</th>
+                                                <th class="text-danger">支付金额*</th>
+                                                <th class="text-danger">支付时间*</th>
+                                                <th>备注</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            <tr>
+                                                <td>HT20230101</td>
+                                                <td>50,000.00</td>
+                                                <td>2023-01-15</td>
+                                                <td>首付款</td>
+                                            </tr>
+                                            <tr>
+                                                <td>HT20230102</td>
+                                                <td>12,000.50</td>
+                                                <td>2023-02-20</td>
+                                                <td>进度款</td>
+                                            </tr>
+                                            <tr>
+                                                <td class="text-muted">...</td>
+                                                <td class="text-muted">...</td>
+                                                <td class="text-muted">...</td>
+                                                <td class="text-muted">...</td>
+                                            </tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                                <div class="form-text mt-2 text-muted">
+                                    <small>* 红色标题为必填列。金额请填写纯数字（可带小数）。</small>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <hr class="my-4">
+
+                    <div class="row justify-content-center">
+                        <div class="col-lg-8">
+                            <h6 class="fw-bold mb-3 text-center">第二步：上传填写好的文件</h6>
+                            <div class="input-group input-group-lg mb-3">
+                                <input class="form-control" type="file" name="file" accept=".xlsx, .xls" required id="balanceFileInput">
+                                <button type="submit" class="btn btn-info px-5 text-white" id="submitBalanceBtn">
+                                    <i class="bi bi-cloud-upload-fill me-1"></i> 确认导入
+                                </button>
+                            </div>
+
+                            <div class="text-center">
+                                <div class="form-check form-check-inline">
+                                    <input class="form-check-input" type="checkbox" id="skipDuplicatesBalance" checked disabled>
+                                    <label class="form-check-label small text-muted" for="skipDuplicatesBalance">
+                                        已默认开启：自动跳过重复记录
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="importModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-xl">
+        <div class="modal-content">
+            <div class="modal-header bg-success text-white">
+                <h5 class="modal-title"><i class="bi bi-file-earmark-excel-fill me-2"></i>批量导入/更新合同信息</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+
+            <form action="{{ url_for('import_excel') }}" method="post" enctype="multipart/form-data">
+                <div class="modal-body p-4">
+                    <div class="row g-4">
+
+                        <div class="col-lg-5">
+                            <div class="card h-100 border-0 bg-light">
+                                <div class="card-body">
+                                    <h6 class="fw-bold text-success mb-3">
+                                        <i class="bi bi-list-check me-1"></i> 数据规范与导入逻辑
+                                    </h6>
+                                    <ul class="list-group list-group-flush bg-transparent small">
+                                        <li class="list-group-item bg-transparent px-0">
+                                            <span class="badge bg-danger me-2">必填</span>
+                                            <strong>合同编号、合同名称</strong> (作为基础识别信息)
+                                        </li>
+                                        <li class="list-group-item bg-transparent px-0">
+                                            <span class="badge bg-secondary me-2">推荐</span>
+                                            金额、甲乙方、签约/履约日期
+                                        </li>
+                                        <li class="list-group-item bg-transparent px-0">
+                                            <i class="bi bi-arrow-repeat text-primary me-1"></i>
+                                            <strong>智能更新：</strong>如果系统中已存在相同的“合同编号”，将自动更新该合同的信息（如金额、日期等）。
+                                        </li>
+                                        <li class="list-group-item bg-transparent px-0">
+                                            <i class="bi bi-plus-circle text-success me-1"></i>
+                                            <strong>自动新增：</strong>如果编号不存在（或未填写编号但名称不重复），将作为新合同创建。
+                                        </li>
+                                    </ul>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="col-lg-7">
+                            <div class="border rounded p-3 h-100">
+                                <div class="d-flex justify-content-between align-items-center mb-3">
+                                    <h6 class="fw-bold text-primary m-0">
+                                        <i class="bi bi-table me-1"></i> 模板格式预览
+                                    </h6>
+                                    <a href="{{ url_for('download_contract_template') }}" class="btn btn-sm btn-outline-success">
+                                        <i class="bi bi-download me-1"></i> 下载标准 Excel 模板
+                                    </a>
+                                </div>
+
+                                <div class="table-responsive border rounded bg-white" style="font-size: 12px;">
+                                    <table class="table table-bordered table-sm mb-0 text-center text-nowrap">
+                                        <thead class="table-light">
+                                            <tr>
+                                                <th class="text-danger">合同编号*</th>
+                                                <th class="text-danger">合同名称*</th>
+                                                <th>甲方单位</th>
+                                                <th>乙方单位</th>
+                                                <th>合同金额</th>
+                                                <th>签约日期</th>
+                                                <th>履约日期</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            <tr>
+                                                <td>HT2023001</td>
+                                                <td>大数据平台建设</td>
+                                                <td>某某科技</td>
+                                                <td>某某工厂</td>
+                                                <td>150,000.00</td>
+                                                <td>2023-01-10</td>
+                                                <td>2023-03-15</td>
+                                            </tr>
+                                            <tr>
+                                                <td>HT2023002</td>
+                                                <td>云服务器租赁</td>
+                                                <td>希望小学</td>
+                                                <td>某某集团</td>
+                                                <td>50,000.00</td>
+                                                <td>2023-01-15</td>
+                                                <td>2024-03-15</td>
+                                            </tr>
+                                            <tr>
+                                                <td class="text-muted">...</td>
+                                                <td class="text-muted">...</td>
+                                                <td class="text-muted">...</td>
+                                                <td class="text-muted">...</td>
+                                                <td class="text-muted">...</td>
+                                            </tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                                <div class="form-text mt-2 text-muted">
+                                    <small>* 红色标题为必填列。金额为纯数字。</small>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <hr class="my-4">
+
+                    <div class="row justify-content-center">
+                        <div class="col-lg-8 text-center">
+                            <h6 class="fw-bold mb-3">第二步：上传填写好的文件</h6>
+                            <div class="input-group input-group-lg">
+                                <input class="form-control" type="file" name="file" accept=".xlsx, .xls" required>
+                                <button type="submit" class="btn btn-success px-5">
+                                    <i class="bi bi-cloud-upload-fill me-1"></i> 确认导入
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+<script>
+    // ---------------------------------------------------------
+    // 1. 翻页跳转逻辑
+    // ---------------------------------------------------------
+    function jumpToPage() {
+        const pageNum = document.getElementById('jumpPageInput').value;
+        const maxPage = {{ pagination.pages }};
+
+        if (pageNum >= 1 && pageNum <= maxPage) {
+            const url = new URL(window.location.href);
+            url.searchParams.set('page', pageNum);
+            window.location.href = url.pathname + url.search;
+        } else {
+            alert(`请输入 1 到 ${maxPage} 之间的页码`);
+        }
+    }
+
+    document.getElementById('jumpPageInput').addEventListener('keypress', function (e) {
+        if (e.key === 'Enter') jumpToPage();
+    });
+
+    // ---------------------------------------------------------
+    // 2. 交付弹窗逻辑
+    // ---------------------------------------------------------
+    function openDeliveryModal(contractId, totalAmount) {
+        document.getElementById('modal_contract_id').value = contractId;
+        document.getElementById('deliveryHistoryBody').innerHTML = '<tr><td colspan="4" class="text-center">加载中...</td></tr>';
+
+        new bootstrap.Modal(document.getElementById('deliveryModal')).show();
+
+        fetch(`/contract/${contractId}/delivery_history`)
+            .then(res => res.json())
+            .then(data => {
+                // 更新标题，显示总金额和当前余额
+                document.getElementById('deliveryModalTitle').innerHTML =
+                    `💰 支付管理：${data.contract_name} (总金额: ¥${Number(totalAmount).toLocaleString()}, 余额: ¥${Number(data.current_balance || data.total_amount - data.total_delivered).toLocaleString()})`;
+
+                let html = '';
+                if (data.history && data.history.length > 0) {
+                    data.history.forEach(log => {
+                        html += `
+                        <tr>
+                            <td>${log.date}</td>
+                            <td class="fw-bold text-success">+ ¥${Number(log.amount).toLocaleString()}</td>
+                            <td>${log.unit || '-'}</td>
+                            <td>
+                                <button class="btn btn-outline-danger btn-sm border-0"
+                                        onclick="deleteDelivery(${log.id}, ${contractId})">
+                                    <i class="bi bi-trash3"></i>
+                                </button>
+                            </td>
+                        </tr>`;
+                    });
+                } else {
+                    html = '<tr><td colspan="4" class="text-center text-muted py-3">暂无支付记录</td></tr>';
+                }
+                document.getElementById('deliveryHistoryBody').innerHTML = html;
+            });
+    }
+
+    function deleteDelivery(deliveryId, contractId) {
+        if(!confirm('确定要删除这条交付记录吗？\n删除后系统将自动修正合同余额。')) {
+            return;
+        }
+
+        fetch(`/delivery/delete/${deliveryId}`, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'}
+        })
+        .then(res => res.json())
+        .then(data => {
+            if(data.status === 'success') {
+                openDeliveryModal(contractId, 0);
+            } else {
+                alert('删除失败：' + data.message);
+            }
+        })
+        .catch(err => alert('系统错误'));
+    }
+
+    function submitDelivery() {
+        const id = document.getElementById('modal_contract_id').value;
+        const formData = new FormData();
+        formData.append('delivery_date', document.getElementById('del_date').value);
+        formData.append('amount', document.getElementById('del_amount').value);
+        formData.append('related_unit', document.getElementById('del_unit').value);
+
+        fetch(`/contract/${id}/add_delivery`, { method: 'POST', body: formData })
+            .then(res => res.json())
+            .then(data => {
+                if(data.status === 'success') location.reload();
+                else alert('错误：' + data.message);
+            });
+    }
+
+    // ---------------------------------------------------------
+    // 3. 核心修复：完善的选择框功能（单选、全选、翻页保留）
+    // ---------------------------------------------------------
+
+    // 全局存储选中的ID
+    window.selectedIds = new Set();
+
+    // 存储键名
+    const STORAGE_KEY = 'selected_contract_ids';
+
+    // 从 sessionStorage 加载已选中的ID
+    function loadSelectedIds() {
+        try {
+            const saved = sessionStorage.getItem(STORAGE_KEY);
+            if (saved) {
+                const ids = JSON.parse(saved);
+                window.selectedIds = new Set(ids.map(id => String(id))); // 统一转为字符串
+            }
+        } catch (e) {
+            console.error('加载选中数据失败:', e);
+            window.selectedIds = new Set();
+        }
+    }
+
+    // 保存选中ID到 sessionStorage
+    function saveSelectedIds() {
+        try {
+            const idsArray = Array.from(window.selectedIds);
+            sessionStorage.setItem(STORAGE_KEY, JSON.stringify(idsArray));
+        } catch (e) {
+            console.error('保存选中数据失败:', e);
+        }
+    }
+
+    // 更新UI状态（复选框状态、按钮状态、计数显示）
+    function updateUI() {
+        const checkboxes = document.querySelectorAll('.item-checkbox');
+        const selectAllCheckbox = document.getElementById('selectAll');
+        const btnBatchDelete = document.getElementById('btnBatchDelete');
+        const btnExport = document.getElementById('btnExport');
+        const selectCountText = document.getElementById('selectCountText');
+        const exportCountText = document.getElementById('exportCountText');
+
+        // 1. 更新单个复选框状态
+        checkboxes.forEach(cb => {
+            cb.checked = window.selectedIds.has(cb.value);
+        });
+
+        // 2. 更新全选框状态
+        if (checkboxes.length > 0) {
+            const allChecked = Array.from(checkboxes).every(cb => window.selectedIds.has(cb.value));
+            selectAllCheckbox.checked = allChecked;
+        }
+
+        // 3. 更新按钮状态和计数
+        const count = window.selectedIds.size;
+
+        if (btnBatchDelete) {
+            btnBatchDelete.disabled = count === 0;
+            if (selectCountText) {
+                selectCountText.innerText = count > 0 ? `(${count})` : '';
+            }
+        }
+
+        if (btnExport) {
+            btnExport.disabled = count === 0;
+            if (exportCountText) {
+                exportCountText.innerText = count > 0 ? `(${count})` : '';
+            }
+        }
+    }
+
+    // 处理单个复选框选择
+    function handleSingleSelect(checkbox) {
+        if (checkbox.checked) {
+            window.selectedIds.add(checkbox.value);
+        } else {
+            window.selectedIds.delete(checkbox.value);
+        }
+
+        saveSelectedIds();
+        updateUI();
+    }
+
+    // 处理全选
+    function handleSelectAll(master) {
+        const checkboxes = document.querySelectorAll('.item-checkbox');
+
+        checkboxes.forEach(cb => {
+            cb.checked = master.checked;
+            if (master.checked) {
+                window.selectedIds.add(cb.value);
+            } else {
+                window.selectedIds.delete(cb.value);
+            }
+        });
+
+        saveSelectedIds();
+        updateUI();
+    }
+
+    // ---------------------------------------------------------
+    // 4. 批量删除功能
+    // ---------------------------------------------------------
+    async function submitBatchDelete() {
+        if (window.selectedIds.size === 0) {
+            alert("请先勾选要删除的合同！");
+            return;
+        }
+
+        const count = window.selectedIds.size;
+        if (!confirm(`确定要删除选中的 ${count} 份合同吗？此操作无法恢复！`)) return;
+
+        try {
+            const response = await fetch("{{ url_for('batch_delete_contracts') }}", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ ids: Array.from(window.selectedIds).map(id => parseInt(id)) })
+            });
+
+            const res = await response.json();
+            if (response.ok && res.status === 'success') {
+                // 删除成功后，清空选择
+                window.selectedIds.clear();
+                sessionStorage.removeItem(STORAGE_KEY);
+                location.reload();
+            } else {
+                alert("删除失败: " + (res.message || "未知错误"));
+            }
+        } catch (e) {
+            alert("请求失败，请检查网络");
+        }
+    }
+
+    // ---------------------------------------------------------
+    // 5. 导出选中功能
+    // ---------------------------------------------------------
+    async function exportSelected() {
+        if (window.selectedIds.size === 0) {
+            alert("请先勾选要导出的合同！");
+            return;
+        }
+
+        const btn = document.getElementById('btnExport');
+        const oldHtml = btn.innerHTML;
+
+        try {
+            btn.disabled = true;
+            btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> 处理中...';
+
+            const response = await fetch('/api/export_contracts', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ ids: Array.from(window.selectedIds).map(id => parseInt(id)) })
+            });
+
+            if (response.ok) {
+                const blob = await response.blob();
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `合同导出_${new Date().toLocaleDateString()}.xlsx`;
+                document.body.appendChild(a);
+                a.click();
+                a.remove();
+            } else {
+                alert("导出失败");
+            }
+        } catch (e) {
+            alert("导出失败：" + e.message);
+        } finally {
+            btn.disabled = false;
+            btn.innerHTML = oldHtml;
+        }
+    }
+
+    // ---------------------------------------------------------
+    // 6. 状态切换功能
+    // ---------------------------------------------------------
+    function setStatus(id, status) {
+        fetch(`/contract/${id}/update_status`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ status: status })
+        })
+        .then(res => res.json())
+        .then(data => {
+            if (data.status === 'success') {
+                location.reload();
+            } else {
+                alert('修改失败，请重试');
+            }
+        });
+    }
+
+    // ---------------------------------------------------------
+    // 7. 文件导入处理
+    // ---------------------------------------------------------
+
+    // 余额导入文件验证
+    document.getElementById('balanceFileInput')?.addEventListener('change', function(e) {
+        const file = e.target.files[0];
+        if (file) {
+            const fileName = file.name.toLowerCase();
+            if (!fileName.endsWith('.xlsx') && !fileName.endsWith('.xls')) {
+                alert('请选择Excel文件 (.xlsx 或 .xls)');
+                this.value = '';
+            } else if (file.size > 10 * 1024 * 1024) {
+                alert('文件太大，请选择小于10MB的文件');
+                this.value = '';
+            }
+        }
+    });
+
+    // 余额导入表单提交
+    document.getElementById('importBalanceForm')?.addEventListener('submit', function(e) {
+        e.preventDefault();
+
+        const submitBtn = document.getElementById('submitBalanceBtn');
+        const originalText = submitBtn.innerHTML;
+        const fileInput = document.getElementById('balanceFileInput');
+
+        // 验证文件
+        if (!fileInput.files || fileInput.files.length === 0) {
+            alert('请选择要上传的文件');
+            return;
+        }
+
+        // 显示加载状态
+        submitBtn.disabled = true;
+        submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> 导入中，请稍候...';
+
+        // 使用Fetch API提交表单
+        const formData = new FormData(this);
+
+        fetch(this.action, {
+            method: 'POST',
+            body: formData
+        })
+        .then(response => {
+            if (response.redirected) {
+                // 如果重定向，说明导入完成，刷新页面
+                window.location.href = response.url;
+            } else {
+                return response.text().then(text => {
+                    alert('导入完成，但可能有问题，请检查');
+                    location.reload();
+                });
+            }
+        })
+        .catch(error => {
+            console.error('导入失败:', error);
+            alert('导入过程中发生错误，请重试');
+            submitBtn.disabled = false;
+            submitBtn.innerHTML = originalText;
+        });
+    });
+
+    // ---------------------------------------------------------
+    // 8. 页面初始化
+    // ---------------------------------------------------------
+    document.addEventListener('DOMContentLoaded', function() {
+        // 加载已选中的ID
+        loadSelectedIds();
+
+        // 更新UI状态
+        updateUI();
+
+        // 绑定事件监听器
+        const selectAllCheckbox = document.getElementById('selectAll');
+        if (selectAllCheckbox) {
+            // 移除之前的监听器，添加新的
+            selectAllCheckbox.onclick = null;
+            selectAllCheckbox.addEventListener('change', function() {
+                handleSelectAll(this);
+            });
+        }
+
+        // 为所有复选框添加点击事件
+        document.querySelectorAll('.item-checkbox').forEach(cb => {
+            cb.onclick = null; // 清除旧的 onclick
+            cb.addEventListener('change', function() {
+                handleSingleSelect(this);
+            });
+        });
+
+        // 绑定按钮事件
+        const btnBatchDelete = document.getElementById('btnBatchDelete');
+        if (btnBatchDelete) {
+            btnBatchDelete.onclick = null;
+            btnBatchDelete.addEventListener('click', submitBatchDelete);
+        }
+
+        const btnExport = document.getElementById('btnExport');
+        if (btnExport) {
+            btnExport.onclick = null;
+            btnExport.addEventListener('click', exportSelected);
+        }
+
+        // 监听页面跳转，清除选择状态（可选，根据需求）
+        document.querySelectorAll('a.page-link').forEach(link => {
+            link.addEventListener('click', function() {
+                // 如果需要跳转后清空选择，可以在这里添加
+                // window.selectedIds.clear();
+                // saveSelectedIds();
+            });
+        });
+    });
+
+    // ---------------------------------------------------------
+    // 9. 清空选择（如果需要的话）
+    // ---------------------------------------------------------
+    function clearSelection() {
+        window.selectedIds.clear();
+        sessionStorage.removeItem(STORAGE_KEY);
+        updateUI();
+    }
+
+    // 如果需要，可以在搜索或重置时清空选择
+    document.querySelector('form[action="{{ url_for("contracts") }}"]')?.addEventListener('submit', function() {
+        // 搜索时清空选择
+        clearSelection();
+    });
+
+    document.querySelector('a[href="{{ url_for("contracts") }}"]')?.addEventListener('click', function() {
+        // 重置时清空选择
+        clearSelection();
+    });
+
+    //合同类型自动保存
+    function updateContractType(contractId, newType) {
+    if (newType === "new") {
+        window.location.href = `/contract/${contractId}`; // 跳转到编辑页进行复杂输入
+        return;
+    }
+
+    fetch(`/api/update_contract_type`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: contractId, type: newType })
+    })
+    .then(res => res.json())
+    .then(data => {
+        if (data.status === 'success') {
+            // 可选：显示一个简短的成功提示
+            console.log('类型更新成功');
+        } else {
+            alert('更新失败: ' + data.message);
+        }
+    });
+
+    document.addEventListener('DOMContentLoaded', function () {
+        const yearSelect = document.getElementById('yearSelect');
+        if (!yearSelect) return;
+
+        // 从后端回填（Jinja 渲染）
+        const selectedYear = "{{ request.args.get('year', '') }}";
+
+        const currentYear = new Date().getFullYear();
+        const startYear = currentYear;
+        const endYear = 2000; // 可按需改为更早或更晚
+
+        // 构造选项（从当前年到 endYear）
+        let options = '<option value="">-- 所属年度 --</option>';
+        for (let y = startYear; y >= endYear; y--) {
+            const sel = (String(y) === String(selectedYear)) ? ' selected' : '';
+            options += `<option value="${y}"${sel}>${y}</option>`;
+        }
+        yearSelect.innerHTML = options;
+    });
+
+</script>
+{% endblock %}

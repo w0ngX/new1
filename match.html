@@ -1,0 +1,326 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h3 class="m-0">服务内容 <small class="text-muted fs-6">(共 {{ pagination.total }} 条)</small></h3>
+    <div>
+        <button type="button" class="btn btn-danger btn-sm me-1" id="btnBatchDelete" onclick="submitBatchDelete()" disabled>
+            <i class="bi bi-trash"></i> 批量删除 <span id="selectCountText"></span>
+        </button>
+        <button type="button" class="btn btn-outline-success btn-sm me-1" data-bs-toggle="modal" data-bs-target="#importModal">
+            <i class="bi bi-file-earmark-excel"></i> 导入服务内容
+        </button>
+        <a href="{{ url_for('edit_task', id=0) }}" class="btn btn-primary btn-sm">
+            <i class="bi bi-plus-lg"></i> 新增服务
+        </a>
+    </div>
+</div>
+
+<div class="card bg-light mb-3">
+    <div class="card-body py-2">
+        <form method="GET" class="row g-2 align-items-center">
+            <div class="col-auto">
+                <input type="text" name="contract_code" class="form-control form-control-sm" placeholder="合同编号..." value="{{ request.args.get('contract_code', '') }}" >
+            </div>
+            <div class="col-auto">
+                <input type="text" name="contract_name" class="form-control form-control-sm" placeholder="合同名称..." value="{{ request.args.get('contract_name', '') }}">
+            </div>
+
+            <div class="col-auto">
+                <input type="text" name="party_a" class="form-control form-control-sm" placeholder="甲方单位..." value="{{ request.args.get('party_a', '') }}" >
+            </div>
+            <div class="col-auto">
+                <input type="text" name="party_b" class="form-control form-control-sm" placeholder="乙方单位..." value="{{ request.args.get('party_b', '') }}" >
+            </div>
+            <div class="col-auto">
+                <input type="text" name="service_content" class="form-control form-control-sm" placeholder="服务内容..." value="{{ request.args.get('service_content', '') }}">
+            </div>
+            <div class="col-auto">
+                <input type="text" name="theme_name" class="form-control form-control-sm" placeholder="主题名称..." value="{{ request.args.get('theme_name', '') }}">
+            </div>
+            <div class="col-auto">
+                <button type="submit" class="btn btn-sm btn-secondary">🔍 查询</button>
+                <a href="{{ url_for('tasks') }}" class="btn btn-sm btn-outline-secondary">重置</a>
+            </div>
+        </form>
+    </div>
+</div>
+
+<form id="batchForm" action="{{ url_for('batch_delete_tasks') }}" method="POST">
+    <div class="table-responsive">
+        <table class="table table-bordered table-hover align-middle">
+            <thead class="table-light">
+                <tr>
+                    <th style="width: 40px;" class="text-center">
+                        <input type="checkbox" id="selectAll" class="form-check-input">
+                    </th>
+                    <th style="width: 60px;">序号</th>
+                    <th>合同名称</th>
+                    <th>服务内容</th>
+                    <th>主题名称</th>
+                    <th style="width: 150px;">操作</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for task in pagination.items %}
+                <tr>
+                    <td class="text-center">
+                        <input type="checkbox" name="selected_ids" value="{{ task.id }}" class="form-check-input item-checkbox">
+                    </td>
+                    <td>{{ (pagination.page - 1) * pagination.per_page + loop.index }}</td>
+                    <td>
+                        <div class="fw-bold">
+                            {{ task.contract.name }}
+                        </div>
+                        <div >
+                        {% if task.contract %}
+                            <div class="small text-muted" style="font-size: 0.85em; margin-top: 4px;">
+                                <span title="合同编号" class="small text-muted">
+                                    📝{{ task.contract.contract_code }}
+                                </span>
+                                <span class="mx-1">|</span>
+                                <span title="甲方单位"> {{ task.contract.party_a }}</span>
+                                <span class="mx-1">|</span>
+                                <span title="乙方单位"> {{ task.contract.party_b }}</span>
+                            </div>
+                        {% else %}
+                            <span class="badge bg-warning text-dark">未关联合同</span>
+                        {% endif %}
+                        </div>
+                    </td>
+                    <td>
+                        <div class="text-truncate" style="max-width: 300px;" title="{{ task.service_content }}">
+                            {{ task.service_content }}
+                        </div>
+                    </td>
+                    <td>
+                        <div class="text-truncate" style="max-width: 300px;" title="{{ task.theme_name }}">
+                            {{ task.theme_name }}
+                        </div>
+
+                        {% set tid = topic_map.get(task.theme_name) %}
+
+                        {% if tid %}
+                            <div class="small mt-1" style="font-size: 0.85em;">
+                                🆔{{ tid }}
+                            </div>
+
+                        {% elif task.theme_name %}
+                            <div class="small text-muted mt-1 fst-italic" style="font-size: 0.8em;">
+                                (未匹配到ID)
+                            </div>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <div class="btn-group" role="group">
+                            <a href="{{ url_for('edit_task', id=task.id) }}" class="btn btn-sm btn-outline-primary">编辑</a>
+                            <a href="{{ url_for('delete_task', id=task.id) }}" class="btn btn-sm btn-outline-danger" onclick="return confirm('确定要删除吗？');">删除</a>
+                        </div>
+                    </td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="6" class="text-center text-muted py-4">暂无服务数据</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</form>
+
+<nav class="mt-4">
+    <div class="d-flex justify-content-center align-items-center flex-wrap gap-3">
+        <ul class="pagination mb-0">
+            {% if pagination.has_prev %}
+            <li class="page-item">
+                <a class="page-link" href="{{ url_for('tasks', page=pagination.prev_num, contract_name=request.args.get('contract_name', ''), theme_name=request.args.get('theme_name', '')) }}">
+                    <i class="bi bi-chevron-left"></i> 上一页
+                </a>
+            </li>
+            {% endif %}
+
+            <li class="page-item active">
+                <span class="page-link">第 {{ pagination.page }} 页 / 共 {{ pagination.pages }} 页</span>
+            </li>
+
+            {% if pagination.has_next %}
+            <li class="page-item">
+                <a class="page-link" href="{{ url_for('tasks', page=pagination.next_num, contract_name=request.args.get('contract_name', ''), theme_name=request.args.get('theme_name', '')) }}">
+                    下一页 <i class="bi bi-chevron-right"></i>
+                </a>
+            </li>
+            {% endif %}
+        </ul>
+        <div class="d-flex align-items-center">
+            <span class="me-2 text-muted small">跳转至</span>
+            <input type="number" id="jumpPageInput" class="form-control form-control-sm text-center" style="width: 60px;" min="1" max="{{ pagination.pages }}" value="{{ pagination.page }}">
+            <span class="ms-2 me-2 text-muted small">页</span>
+            <button class="btn btn-sm btn-outline-secondary" onclick="jumpToPage()">确定</button>
+        </div>
+    </div>
+</nav>
+<!---导入服务模态框--->
+<div class="modal fade" id="importModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-xl">
+        <div class="modal-content">
+            <div class="modal-header bg-success text-white">
+                <h5 class="modal-title"><i class="bi bi-file-earmark-excel-fill me-2"></i>批量导入服务内容</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+
+            <form action="{{ url_for('import_task_excel') }}" method="POST" enctype="multipart/form-data">
+                <div class="modal-body p-4">
+                    <div class="row g-4">
+
+                        <div class="col-lg-5">
+                            <div class="card h-100 border-0 bg-light">
+                                <div class="card-body">
+                                    <h6 class="fw-bold text-success mb-3">
+                                        <i class="bi bi-list-check me-1"></i> 第一步：检查数据规范
+                                    </h6>
+                                    <ul class="list-group list-group-flush bg-transparent small">
+                                        <li class="list-group-item bg-transparent px-0">
+                                            <span class="badge bg-danger me-2">必填</span>
+                                            <strong>合同名称、服务内容、主题名称</strong>
+                                        </li>
+                                        <li class="list-group-item bg-transparent px-0">
+                                            <i class="bi bi-link-45deg text-primary me-1"></i>
+                                            <strong>自动关联：</strong>系统会根据“合同名称”自动查找并关联已有合同。请确保名称完全一致（包括括号、空格）。
+                                        </li>
+                                        <li class="list-group-item bg-transparent px-0">
+                                            <i class="bi bi-exclamation-triangle text-warning me-1"></i>
+                                            <strong>注意：</strong>如果合同名称在系统中不存在，该服务内容将显示为“未关联合同”。
+                                        </li>
+                                    </ul>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="col-lg-7">
+                            <div class="border rounded p-3 h-100">
+                                <div class="d-flex justify-content-between align-items-center mb-3">
+                                    <h6 class="fw-bold text-primary m-0">
+                                        <i class="bi bi-table me-1"></i> 模板格式预览
+                                    </h6>
+                                    <a href="{{ url_for('download_task_template') }}" class="btn btn-sm btn-outline-primary">
+                                        <i class="bi bi-download me-1"></i> 下载标准 Excel 模板
+                                    </a>
+                                </div>
+
+                                <div class="table-responsive border rounded bg-white" style="font-size: 12px;">
+                                    <table class="table table-bordered table-sm mb-0 text-center text-nowrap">
+                                        <thead class="table-light">
+                                            <tr>
+                                                <th class="text-danger">合同名称*</th>
+                                                <th class="text-danger">服务内容*</th>
+                                                <th class="text-danger">主题名称*</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            <tr>
+                                                <td>XX省数据采购项目</td>
+                                                <td>提供全省高校科研数据...</td>
+                                                <td>科研数据</td>
+                                            </tr>
+                                            <tr>
+                                                <td>智慧城市建设合同</td>
+                                                <td>提供实时水质监测API...</td>
+                                                <td>水质监测</td>
+                                            </tr>
+                                            <tr>
+                                                <td class="text-muted">...</td>
+                                                <td class="text-muted">...</td>
+                                                <td class="text-muted">...</td>
+                                            </tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                                <div class="form-text mt-2 text-muted">
+                                    <small>* 红色标题为必填列，请勿修改模板表头。</small>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <hr class="my-4">
+
+                    <div class="row justify-content-center">
+                        <div class="col-lg-8 text-center">
+                            <h6 class="fw-bold mb-3">第二步：上传填写好的文件</h6>
+                            <div class="input-group input-group-lg">
+                                <input type="file" class="form-control" name="file" accept=".xlsx, .xls" required>
+                                <button type="submit" class="btn btn-success px-5">
+                                    <i class="bi bi-cloud-upload-fill me-1"></i> 确认导入
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+    // --- 分页跳转 ---
+    function jumpToPage() {
+        const pageNum = document.getElementById('jumpPageInput').value;
+        const maxPage = {{ pagination.pages }};
+        if (pageNum >= 1 && pageNum <= maxPage) {
+            const url = new URL(window.location.href);
+            url.searchParams.set('page', pageNum);
+            window.location.href = url.pathname + url.search;
+        } else { alert(`请输入 1 到 ${maxPage} 之间的页码`); }
+    }
+    document.getElementById('jumpPageInput').addEventListener('keypress', function (e) {
+        if (e.key === 'Enter') jumpToPage();
+    });
+
+    // --- 批量删除逻辑 ---
+    function submitBatchDelete() {
+        var len = document.querySelectorAll('.item-checkbox:checked').length;
+        if (len === 0) { alert('请至少选择一项！'); return; }
+        if (confirm('确定要批量删除选中的 ' + len + ' 项服务吗？')) {
+            // 提交 id="batchForm"
+            document.getElementById('batchForm').submit();
+        }
+    }
+
+    // --- 全选与按钮联动 ---
+    document.addEventListener('DOMContentLoaded', function() {
+        const selectAllCheckbox = document.getElementById('selectAll');
+        const itemCheckboxes = document.querySelectorAll('.item-checkbox');
+        const btnBatchDelete = document.getElementById('btnBatchDelete');
+        const selectCountText = document.getElementById('selectCountText');
+
+        // 更新按钮状态
+        function updateBatchButton() {
+            const checkedCount = document.querySelectorAll('.item-checkbox:checked').length;
+            if (checkedCount > 0) {
+                btnBatchDelete.disabled = false;
+                selectCountText.innerText = '(' + checkedCount + ')';
+            } else {
+                btnBatchDelete.disabled = true;
+                selectCountText.innerText = '';
+            }
+        }
+
+        // 全选事件
+        if (selectAllCheckbox) {
+            selectAllCheckbox.addEventListener('change', function() {
+                const isChecked = this.checked;
+                itemCheckboxes.forEach(cb => cb.checked = isChecked);
+                updateBatchButton();
+            });
+        }
+
+        // 单选事件
+        itemCheckboxes.forEach(cb => {
+            cb.addEventListener('change', function() {
+                updateBatchButton();
+                if (!this.checked && selectAllCheckbox) selectAllCheckbox.checked = false;
+            });
+        });
+    });
+</script>
+{% endblock %}

@@ -1,0 +1,215 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-8">
+        <div class="card shadow-sm">
+            <div class="card-header bg-success text-white">
+                {% if task %}编辑服务{% else %}新建服务{% endif %}
+            </div>
+            <div class="card-body">
+                <form method="POST">
+                    
+                    <div class="mb-3">
+                        <label class="form-label">合同名称 <span class="text-danger">*</span></label>
+
+                        <div class="card card-body bg-light py-2 px-3 mb-2">
+                            <div class="small text-muted mb-1"><i class="bi bi-funnel"></i> 快速筛选合同：</div>
+                            <div class="row g-2">
+                                <div class="col-4">
+                                    <input type="text" id="filterCode" class="form-control form-control-sm"
+                                           placeholder="搜编号..." onkeyup="filterContracts()">
+                                </div>
+                                <div class="col-4">
+                                    <input type="text" id="filterPA" class="form-control form-control-sm"
+                                           placeholder="搜甲方..." onkeyup="filterContracts()">
+                                </div>
+                                <div class="col-4">
+                                    <input type="text" id="filterPB" class="form-control form-control-sm"
+                                           placeholder="搜乙方..." onkeyup="filterContracts()">
+                                </div>
+                            </div>
+                        </div>
+
+                        <select name="contract_name" id="contractSelect" class="form-select" required>
+                            <option value="">-- 请选择合同 --</option>
+                            {% for c in all_contracts %}
+                                <option value="{{ c.name }}"
+                                        data-code="{{ c.contract_code or '' }}"
+                                        data-pa="{{ c.party_a or '' }}"
+                                        data-pb="{{ c.party_b or '' }}"
+                                        {% if task and task.contract_name == c.name %}selected{% endif %}>
+                                    {{ c.name }}
+                                    {% if c.contract_code %}({{ c.contract_code }}){% endif %}
+                                </option>
+                            {% endfor %}
+                        </select>
+
+                        <div class="form-text" id="matchCountMsg"></div>
+                    </div>
+
+                    <script>
+                        function filterContracts() {
+                            // 1. 获取搜索词 (转小写以忽略大小写)
+                            var sCode = document.getElementById('filterCode').value.toLowerCase();
+                            var sPA = document.getElementById('filterPA').value.toLowerCase();
+                            var sPB = document.getElementById('filterPB').value.toLowerCase();
+
+                            var select = document.getElementById('contractSelect');
+                            var options = select.getElementsByTagName('option');
+                            var visibleCount = 0;
+
+                            // 2. 循环检查每一个选项
+                            for (var i = 1; i < options.length; i++) { // 跳过第一个 "--请选择--"
+                                var opt = options[i];
+
+                                // 获取该选项的数据
+                                var code = (opt.getAttribute('data-code') || '').toLowerCase();
+                                var pa = (opt.getAttribute('data-pa') || '').toLowerCase();
+                                var pb = (opt.getAttribute('data-pb') || '').toLowerCase();
+                                var name = opt.text.toLowerCase(); // 同时也搜一下名字
+
+                                // 3. 匹配逻辑 (包含关系)
+                                // 如果输入框为空，则视为匹配成功
+                                var matchCode = !sCode || code.includes(sCode) || name.includes(sCode);
+                                var matchPA = !sPA || pa.includes(sPA);
+                                var matchPB = !sPB || pb.includes(sPB);
+
+                                if (matchCode && matchPA && matchPB) {
+                                    opt.style.display = ""; // 显示
+                                    visibleCount++;
+                                } else {
+                                    opt.style.display = "none"; // 隐藏
+                                }
+                            }
+
+                            // 4. 用户反馈
+                            var msgDiv = document.getElementById('matchCountMsg');
+                            if (sCode || sPA || sPB) {
+                                msgDiv.textContent = `匹配到 ${visibleCount} 个合同`;
+                                // 如果只有一个匹配项，自动帮用户选中（可选优化）
+                                // if (visibleCount === 1) select.selectedIndex = ...
+                            } else {
+                                msgDiv.textContent = "";
+                            }
+                        }
+                    </script>
+
+                    <div class="mb-3">
+                        <label class="form-label">服务内容 <span class="text-danger">*</span></label>
+                        <textarea name="service_content" class="form-control" rows="5" placeholder="描述具体的服务要求...">{{ task.service_content if task else '' }}</textarea>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">主题名称 <span class="text-danger">*</span></label>
+
+                        <div class="input-group mb-2">
+                            <span class="input-group-text"><i class="bi bi-keyboard"></i></span>
+                            <input type="text" name="theme_name" id="themeNameInput" class="form-control"
+                                   placeholder="可直接输入，或从下方筛选后点击选择"
+                                   value="{{ task.theme_name if task else '' }}" required>
+                        </div>
+
+                        <div class="card card-body bg-light py-2 px-3">
+                            <div class="d-flex justify-content-between align-items-center mb-2">
+                                <small class="text-muted"><i class="bi bi-funnel"></i> 辅助筛选主题</small>
+                                <small class="text-primary" id="topicMatchMsg"></small>
+                            </div>
+
+                            <div class="row g-2 mb-2">
+                                <div class="col-4">
+                                    <input type="text" id="filterTID" class="form-control form-control-sm"
+                                           placeholder="搜ID..." onkeyup="filterTopics()">
+                                </div>
+                                <div class="col-4">
+                                    <input type="text" id="filterL1" class="form-control form-control-sm"
+                                           placeholder="搜一级..." onkeyup="filterTopics()">
+                                </div>
+                                <div class="col-4">
+                                    <input type="text" id="filterL2" class="form-control form-control-sm"
+                                           placeholder="搜二级..." onkeyup="filterTopics()">
+                                </div>
+                            </div>
+
+                            <select id="topicHelperSelect" class="form-select form-select-sm"  onchange="pickTopic(this)">
+                                <option value="" disabled selected>-- 筛选结果将显示在这里 --</option>
+                                {% for t in all_topics %}
+                                    <option value="{{ t.name }}"
+                                            data-tid="{{ t.theme_id or '' }}"
+                                            data-l1="{{ t.level1_id or '' }}"
+                                            data-l2="{{ t.level2_id or '' }}">
+                                        {{ t.name }}
+                                        {% if t.theme_id %}(ID: {{ t.theme_id }}){% endif %}
+                                    </option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                    </div>
+
+                    <script>
+                        // 1. 选中下拉框某一项时，填入上方输入框
+                        function pickTopic(selectObj) {
+                            var val = selectObj.value;
+                            if (val) {
+                                document.getElementById('themeNameInput').value = val;
+                            }
+                        }
+
+                        // 2. 筛选逻辑
+                        function filterTopics() {
+                            var sTID = document.getElementById('filterTID').value.toLowerCase().trim();
+                            var sL1 = document.getElementById('filterL1').value.toLowerCase().trim();
+                            var sL2 = document.getElementById('filterL2').value.toLowerCase().trim();
+
+                            var select = document.getElementById('topicHelperSelect');
+                            var options = select.getElementsByTagName('option');
+                            var visibleCount = 0;
+
+                            for (var i = 1; i < options.length; i++) {
+                                var opt = options[i];
+                                var tid = (opt.getAttribute('data-tid') || '').toLowerCase();
+                                var l1 = (opt.getAttribute('data-l1') || '').toLowerCase();
+                                var l2 = (opt.getAttribute('data-l2') || '').toLowerCase();
+                                var name = opt.text.toLowerCase();
+
+                                // 规则1：精确字段匹配 (如果输入框不为空，则必须匹配对应字段)
+                                var matchTID = !sTID || tid.includes(sTID);
+                                var matchL1 = !sL1 || l1.includes(sL1);
+                                var matchL2 = !sL2 || l2.includes(sL2);
+
+                                // 规则2：名字模糊匹配 (修复后的逻辑)
+                                // 只有当输入框有值时，才检查名字是否包含该值
+                                var matchName = (sTID && name.includes(sTID)) ||
+                                                (sL1 && name.includes(sL1)) ||
+                                                (sL2 && name.includes(sL2));
+
+                                // 最终判定：(满足所有字段限制) 或者 (名字直接命中任意关键词)
+                                if ((matchTID && matchL1 && matchL2) || matchName) {
+                                    opt.style.display = "";
+                                    visibleCount++;
+                                } else {
+                                    opt.style.display = "none";
+                                }
+                            }
+
+                            var msgDiv = document.getElementById('topicMatchMsg');
+                            if (sTID || sL1 || sL2) {
+                                msgDiv.textContent = `找到 ${visibleCount} 个`;
+                                // 动态调整高度，最少显示2行，最多显示5行
+                                select.size = visibleCount > 3 ? 5 : (visibleCount < 2 ? 2 : visibleCount + 1);
+                            } else {
+                                msgDiv.textContent = "";
+                                select.size = 5; // 默认高度
+                            }
+                        }
+                    </script>
+                    <hr>
+                    <div class="d-flex justify-content-end gap-2">
+                        <a href="{{ url_for('tasks') }}" class="btn btn-secondary">取消</a>
+                        <button type="submit" class="btn btn-success px-4">保存服务</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

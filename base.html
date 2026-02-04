@@ -1,0 +1,449 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ title }} - 数据管理系统</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css">
+
+    <style>
+        /* 修改 base.html 中的 style 部分 */
+        html {
+            font-size: 14px; /* Bootstrap 默认通常是 16px，改为 14px 会整体缩小约 12% */
+        }
+
+        body {
+            font-size: 0.85rem; /* 进一步精细控制正文字体 */
+            line-height: 1.5;
+        }
+        body {
+            background-color: #f4f6f9;
+            overflow-x: hidden;
+        }
+        :root {
+          --primary-color: #2c3e50;
+          --secondary-color: #3498db;
+          --success-color: #28a745;
+          --info-color: #17a2b8;
+          --warning-color: #ffc107;
+          --danger-color: #dc3545;
+          --light-color: #f8f9fa;
+          --dark-color: #343a40;
+          --shadow-sm: 0 2px 8px rgba(0,0,0,0.08);
+          --shadow-md: 0 4px 12px rgba(0,0,0,0.12);
+          --shadow-lg: 0 8px 24px rgba(0,0,0,0.16);
+          --radius-sm: 6px;
+          --radius-md: 10px;
+          --radius-lg: 16px;
+        }
+        /* --- 侧边栏样式修改 --- */
+        .sidebar {
+            /* 关键修改：高度锁定为视窗高度，且固定在顶部 */
+            height: 100vh;
+            position: sticky;
+            top: 0;
+            width: 270px;
+            background-color: #2c3e50; /* 午夜蓝 */
+            box-shadow: 2px 0 6px rgba(0,0,0,0.1);
+            padding-top: 20px;
+            /* 关键：让内部元素可以滚动，但侧边栏本身不动 */
+            overflow-y: auto;
+            /* 隐藏侧边栏滚动条(美观) */
+            scrollbar-width: none;
+        }
+        .sidebar-header {
+            padding: 00px;
+            font-size: 1rem; /* 降低标题大小 */
+            text-align: center;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+            white-space: nowrap; /* 强制不换行 */
+            overflow: hidden;    /* 超出部分隐藏 */
+            text-overflow: ellipsis; /* 显示省略号 */
+        }
+        .main-container {
+            flex: 1;
+            /* 2. 这里的 margin-left 必须和上面的 width 一致 */
+            margin-left: 300px;
+            min-width: 0;
+            background-color: #f4f6f9;
+            padding: 20px;
+        }
+        .sidebar::-webkit-scrollbar {
+            display: none;
+        }
+
+        .sidebar-brand {
+            background: rgba(255,255,255,0.05);
+            border-radius: var(--radius-md);
+            color: #ecf0f1;
+            font-size: 1.5rem;
+            font-weight: bold;
+            text-align: center;
+            margin-bottom: 30px;
+            letter-spacing: 1px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+        .sidebar-brand i {
+            color: #3498db;
+        }
+
+        .sidebar .nav-link {
+            color: #bdc3c7;
+            font-size: 1rem;
+            padding: 12px 16px;
+            margin: 5px 15px;
+            border-radius: 10px;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+        }
+
+        .sidebar .nav-link i {
+            margin-right: 8px;
+            font-size: 1.2rem;
+            width: 40px;
+            text-align: center;
+        }
+
+        .sidebar .nav-link:hover {
+            color: #fff;
+            background-color: #34495e;
+            transform: translateX(5px);
+        }
+
+        .sidebar .nav-link.active {
+            color: #fff;
+            background: linear-gradient(45deg, #3498db, #2980b9);
+            box-shadow: 0 4px 6px rgba(0,0,0,0.2);
+            font-weight: 500;
+        }
+
+        .content-area {
+            padding: 30px;
+            width: 100%;
+        }
+
+        .alert-message {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 9999;
+            min-width: 300px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        /* 卡片统一样式 */
+        .card {
+          border: none;
+          border-radius: var(--radius-md);
+          box-shadow: var(--shadow-sm);
+          transition: transform 0.2s, box-shadow 0.2s;
+        }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="container-fluid">
+        <div class="row flex-nowrap">
+            <div class="col-auto col-md-3 col-xl-2 px-0 sidebar">
+                <div class="d-flex flex-column align-items-center align-items-sm-start px-3 pt-2 text-white h-100">
+
+                    <a href="/" class="d-flex align-items-center pb-3 mb-md-0 me-md-auto text-decoration-none w-100 justify-content-center">
+                        <div class="sidebar-brand">
+                            <i class="bi bi-database-fill-gear"></i> 极数宝数据管理中心
+                        </div>
+                    </a>
+
+                    <ul class="nav nav-pills flex-column mb-auto w-100" id="menu">
+                        <li class="nav-item w-100">
+                            <a href="{{ url_for('index') }}" class="nav-link {{ is_active('index') }}">
+                                <i class="bi bi-speedometer2"></i> <span class="d-none d-sm-inline">总览仪表盘</span>
+                            </a>
+
+                            <a href="{{ url_for('contracts') }}" class="nav-link {{ is_active('contracts') }}">
+                                <i class="bi bi-file-earmark-text"></i> <span class="d-none d-sm-inline"> 合同管理</span>
+                            </a>
+
+                            <a href="{{ url_for('topics') }}" class="nav-link {{ is_active('topics') }}">
+                                <i class="bi bi-tags"></i> <span class="d-none d-sm-inline"> 主题管理</span>
+                            </a>
+
+                            <a href="{{ url_for('tasks') }}" class="nav-link {{ is_active('tasks') }}">
+                                <i class="bi bi-list-check"></i> <span class="d-none d-sm-inline"> 服务内容管理</span>
+                            </a>
+
+                            <a href="{{ url_for('service_mapping') }}" class="nav-link {{ 'active' if request.endpoint == 'service_mapping' else '' }}">
+                                <i class="bi bi-diagram-3"></i> 对应关系透视
+                            </a>
+
+                            <a  href="{{ url_for('task_management') }}" class="nav-link {{ is_active('task_management') }}">
+                                <i class="bi bi-activity"></i> 任务管理
+                            </a>
+                        </li>
+
+                    </ul>
+
+                    <div class="dropdown pb-4 ps-3 mt-auto w-100">
+                        <hr style="border-color: rgba(255,255,255,0.1);">
+                        <a href="#" class="d-flex align-items-center text-white text-decoration-none dropdown-toggle" id="dropdownUser1" data-bs-toggle="dropdown" aria-expanded="false">
+                            <div class="rounded-circle bg-primary d-flex align-items-center justify-content-center text-white me-2" style="width: 32px; height: 32px;">
+                                <i class="bi bi-person-fill"></i>
+                            </div>
+                            <span class="d-none d-sm-inline">
+                                {% if current_user.is_authenticated %}
+                                    {{ current_user.username }}
+                                {% else %}
+                                    未登录
+                                {% endif %}
+                            </span>
+                        </a>
+                        <ul class="dropdown-menu dropdown-menu-dark text-small shadow">
+                            <li><a class="dropdown-item" href="#">设置</a></li>
+                            <li><hr class="dropdown-divider"></li>
+                            <li><a class="dropdown-item" href="{{ url_for('logout') }}">退出登录</a></li>
+                        </ul>
+                    </div>
+
+                </div>
+            </div>
+
+            <div class="col py-3 content-area">
+                {% with messages = get_flashed_messages(with_categories=true) %}
+                  {% if messages %}
+                    <div class="alert-container">
+                    {% for category, message in messages %}
+                      <div class="alert alert-{{ category }} alert-dismissible fade show alert-message" role="alert">
+                        <strong>提示：</strong> {{ message }}
+                        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                      </div>
+                    {% endfor %}
+                    </div>
+                  {% endif %}
+                {% endwith %}
+
+                {% block content %}{% endblock %}
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>
+<div id="aiFloatingBall"
+     style="position: fixed; bottom: 100px; right: 20px; z-index: 9999; cursor: move; touch-action: none; user-select: none;">
+    <button class="btn btn-primary rounded-circle shadow-lg p-0 d-flex align-items-center justify-content-center"
+            style="width: 60px; height: 60px; border: 2px solid white;">
+        <span style="font-size: 30px;">🤖</span>
+    </button>
+</div>
+
+<div id="aiChatBox" class="card shadow-lg"
+     style="position: fixed; bottom: 90px; right: 90px; width: 350px; height: 500px; display: none; z-index: 9999; flex-direction: column;">
+    <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
+        <span>🤖 智能助手</span>
+        <div>
+            <button class="btn btn-sm btn-outline-light me-1 border-0" onclick="clearChat()" title="清空对话">
+                <i class="bi bi-eraser"></i>
+            </button>
+            <button type="button" class="btn-close btn-close-white" onclick="toggleAIChat()"></button>
+        </div>
+    </div>
+    <div class="card-body" id="aiResponseArea" style="overflow-y: auto; flex-grow: 1; background: #f8f9fa;">
+        <div class="text-muted small text-center mt-5">我是您的数据助手<br>请问我关于合同、主题或任务的问题...</div>
+    </div>
+    <div class="card-footer p-2">
+        <div class="input-group">
+            <input type="text" id="aiInput" class="form-control" placeholder="输入问题..." onkeypress="handleEnter(event)">
+            <button class="btn btn-primary" onclick="sendAIQuery()">发送</button>
+        </div>
+    </div>
+</div>
+
+<script>
+    // --- 拖拽逻辑开始 ---
+    const ball = document.getElementById('aiFloatingBall');
+    let isDragging = false;
+    let hasMoved = false; // 用于区分是"点击"还是"拖拽"
+    let startX, startY, initialLeft, initialTop;
+
+    // 鼠标/手指按下
+    ball.addEventListener('mousedown', startDrag);
+    ball.addEventListener('touchstart', startDrag, {passive: false});
+
+    function startDrag(e) {
+        isDragging = true;
+        hasMoved = false; // 重置移动标记
+
+        // 兼容移动端和PC端获取坐标
+        const clientX = e.type === 'touchstart' ? e.touches[0].clientX : e.clientX;
+        const clientY = e.type === 'touchstart' ? e.touches[0].clientY : e.clientY;
+
+        startX = clientX;
+        startY = clientY;
+
+        // 获取元素当前位置
+        const rect = ball.getBoundingClientRect();
+        initialLeft = rect.left;
+        initialTop = rect.top;
+
+        // 绑定移动和松开事件到 window，防止拖太快脱离元素
+        window.addEventListener('mousemove', onDrag);
+        window.addEventListener('touchmove', onDrag, {passive: false});
+        window.addEventListener('mouseup', stopDrag);
+        window.addEventListener('touchend', stopDrag);
+    }
+
+    function onDrag(e) {
+        if (!isDragging) return;
+
+        const clientX = e.type === 'touchmove' ? e.touches[0].clientX : e.clientX;
+        const clientY = e.type === 'touchmove' ? e.touches[0].clientY : e.clientY;
+
+        // 计算移动距离
+        const dx = clientX - startX;
+        const dy = clientY - startY;
+
+        // 如果移动距离超过 5px，则视为拖拽，而不是误触
+        if (Math.abs(dx) > 5 || Math.abs(dy) > 5) {
+            hasMoved = true;
+        }
+
+        // 阻止移动端默认的滚动行为
+        if (e.type === 'touchmove') {
+            e.preventDefault();
+        }
+
+        // 计算新位置
+        let newLeft = initialLeft + dx;
+        let newTop = initialTop + dy;
+
+        // 限制在屏幕范围内 (防止拖出去回不来)
+        const maxLeft = window.innerWidth - ball.offsetWidth;
+        const maxTop = window.innerHeight - ball.offsetHeight;
+
+        newLeft = Math.max(0, Math.min(newLeft, maxLeft));
+        newTop = Math.max(0, Math.min(newTop, maxTop));
+
+        // 应用新位置
+        ball.style.left = newLeft + 'px';
+        ball.style.top = newTop + 'px';
+        ball.style.right = 'auto';  // 清除 right 属性，否则 left 不生效
+        ball.style.bottom = 'auto'; // 清除 bottom 属性
+    }
+
+    function stopDrag() {
+        isDragging = false;
+        // 移除监听
+        window.removeEventListener('mousemove', onDrag);
+        window.removeEventListener('touchmove', onDrag);
+        window.removeEventListener('mouseup', stopDrag);
+        window.removeEventListener('touchend', stopDrag);
+    }
+
+    // 绑定点击事件 (核心逻辑：只有没拖拽过，才算点击)
+    ball.addEventListener('click', function(e) {
+        if (!hasMoved) {
+            toggleAIChat();
+        }
+    });
+    // --- 拖拽逻辑结束 ---
+
+
+    // --- 聊天框业务逻辑 ---
+    function toggleAIChat() {
+        const box = document.getElementById('aiChatBox');
+        // 简单的显示/隐藏切换
+        if (box.style.display === 'none' || box.style.display === '') {
+            box.style.display = 'flex';
+
+            // 智能定位：如果悬浮球在右边，聊天框在左边；反之亦然
+            const ballRect = ball.getBoundingClientRect();
+            const boxWidth = 350;
+            const boxHeight = 500;
+
+            // 默认显示在球的左侧
+            let leftPos = ballRect.left - boxWidth - 10;
+            // 如果左边空间不够，就显示在球的右侧
+            if (leftPos < 10) {
+                leftPos = ballRect.right + 10;
+            }
+
+            // 垂直方向底部对齐
+            let topPos = ballRect.bottom - boxHeight;
+            // 防止顶部超出屏幕
+            if (topPos < 10) topPos = 10;
+            // 防止底部超出屏幕
+            if (topPos + boxHeight > window.innerHeight) topPos = window.innerHeight - boxHeight - 10;
+
+            box.style.left = leftPos + 'px';
+            box.style.top = topPos + 'px';
+            box.style.right = 'auto';
+            box.style.bottom = 'auto';
+
+            document.getElementById('aiInput').focus();
+        } else {
+            box.style.display = 'none';
+        }
+    }
+
+    function clearChat() {
+        document.getElementById('aiResponseArea').innerHTML = '<div class="text-muted small text-center mt-5">对话已清空</div>';
+    }
+
+    function handleEnter(e) {
+        if (e.key === 'Enter') sendAIQuery();
+    }
+
+    // 发送请求 (流式响应版)
+    async function sendAIQuery() {
+        const input = document.getElementById('aiInput');
+        const output = document.getElementById('aiResponseArea');
+        const query = input.value.trim();
+
+        if (!query) return;
+
+        input.value = '';
+        output.innerHTML += `<div class="d-flex justify-content-end mb-2"><div class="bg-primary text-white p-2 rounded" style="max-width: 80%;">${query}</div></div>`;
+
+        const aiBubbleId = 'ai-' + Date.now();
+        output.innerHTML += `<div class="d-flex justify-content-start mb-2"><div id="${aiBubbleId}" class="bg-white border p-2 rounded shadow-sm" style="max-width: 80%;">Thinking...</div></div>`;
+        const aiBubble = document.getElementById(aiBubbleId);
+        output.scrollTop = output.scrollHeight;
+
+        try {
+            const response = await fetch('/api/ai_query', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ query: query })
+            });
+
+            const reader = response.body.getReader();
+            const decoder = new TextDecoder("utf-8");
+            let aiText = "";
+            aiBubble.innerHTML = "";
+
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+                const chunk = decoder.decode(value, { stream: true });
+                const lines = chunk.split('\n');
+                for (const line of lines) {
+                    if (line.startsWith('data: ')) {
+                        const jsonStr = line.slice(6);
+                        if (jsonStr.trim() === '[DONE]') break;
+                        try {
+                            const data = JSON.parse(jsonStr);
+                            if (data.text) {
+                                aiText += data.text;
+                                aiBubble.innerHTML = aiText.replace(/\n/g, '<br>');
+                                output.scrollTop = output.scrollHeight;
+                            }
+                        } catch (e) { console.error(e); }
+                    }
+                }
+            }
+        } catch (err) {
+            aiBubble.innerHTML += `<br><span class="text-danger">出错: ${err.message}</span>`;
+        }
+    }
+</script>

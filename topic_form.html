@@ -1,0 +1,406 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-8">
+        <div class="card shadow-sm">
+            <div class="card-header bg-primary text-white">
+                <i class="bi bi-pencil-square"></i> {% if topic %}编辑主题{% else %}新增主题{% endif %}
+            </div>
+            <div class="card-body">
+                <form method="POST">
+                    <div class="row mb-3">
+                        <!-- 一级主题：输入框 + 下拉选择 -->
+                        <div class="col-md-6">
+                            <label class="form-label">一级主题 <span class="text-danger">*</span></label>
+                            <div class="input-group">
+                                <input type="text" name="level1_id" class="form-control" required
+                                       value="{{ topic.level1_id if topic else '' }}"
+                                       id="level1_input"
+                                       placeholder="手动输入一级主题">
+                                <select class="form-select" id="level1_select" style="max-width: 150px;" onchange="syncLevel1()">
+                                    <option value="">现有一级主题</option>
+
+                                    {% for p in all_parents %}
+                                        <option value="{{ p }}" {% if topic and topic.level1_id == p %}selected{% endif %}>{{ p }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div class="form-text text-muted mt-1">
+                                可以直接输入，或从右侧下拉框选择已有的一级主题
+                            </div>
+                        </div>
+
+                        <!-- 二级主题：输入框 + 下拉选择 -->
+                        <div class="col-md-6">
+                            <label class="form-label">二级主题</label>
+                            <div class="input-group">
+                                <input type="text" name="level2_id" class="form-control"
+                                       value="{{ topic.level2_id if topic else '' }}"
+                                       id="level2_input"
+                                       placeholder="手动输入二级主题">
+                                <select class="form-select" id="level2_select" style="max-width: 150px;" onchange="syncLevel2()">
+                                    <option value="">现有二级主题</option>
+                                    {% for level2 in all_level2_list %}
+                                        <option value="{{ level2 }}" {% if topic and topic.level2_id == level2 %}selected{% endif %}>{{ level2 }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div class="form-text text-muted mt-1">
+                                可以直接输入，或从右侧下拉框选择已有的二级主题
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="row mb-3">
+                        <!-- 主题ID -->
+                        <div class="col-md-6">
+                            <label class="form-label">主题ID</label>
+                            <input type="text" name="theme_id" class="form-control"
+                                   value="{{ topic.theme_id if topic else '' }}"
+                                   placeholder="例如：T001">
+                        </div>
+
+                        <!-- 主题名称 -->
+                        <div class="col-md-6">
+                            <label class="form-label">主题名称 <span class="text-danger">*</span></label>
+                            <input type="text" name="name" class="form-control" required
+                                   value="{{ topic.name if topic else '' }}"
+                                   placeholder="请输入主题名称">
+                        </div>
+                    </div>
+
+                    <!-- 采集方式 -->
+                    <div class="mb-3">
+                        <label class="form-label">采集方式 (可多选)</label>
+                        <div class="border rounded p-3 bg-light">
+                            {% set current_methods = (topic.method or "").split(',') %}
+
+                            <div class="form-check form-check-inline">
+                                <input class="form-check-input" type="checkbox" name="methods" value="程序采集" id="m1"
+                                       {% if "程序采集" in current_methods %}checked{% endif %}>
+                                <label class="form-check-label" for="m1">程序采集</label>
+                            </div>
+
+                            <div class="form-check form-check-inline">
+                                <input class="form-check-input" type="checkbox" name="methods" value="人工采集" id="m2"
+                                       {% if "人工采集" in current_methods %}checked{% endif %}>
+                                <label class="form-check-label" for="m2">人工采集</label>
+                            </div>
+
+                        </div>
+                        <div class="form-text">勾选后系统将自动保存为组合方式（如：程序采集,人工采集）。</div>
+                    </div>
+
+                    <!-- 采集频率 -->
+                    <div class="mb-3">
+                        <label class="form-label">采集频率</label>
+                        <div class="input-group">
+                            <input type="text" class="form-control" name="frequency"
+                                   id="freqInput"
+                                   value="{{ topic.frequency if topic else '' }}"
+                                   placeholder="手动输入或右侧选择 ->">
+                            <select class="form-select" id="freqSelect" style="max-width: 150px;" onchange="syncFrequency()" >
+                                <option value=""></option>
+                                {% set freq_options = ['年', '半年', '季度', '月', '周', '日'] %}
+                                {% for opt in freq_options %}
+                                    <option value="{{ opt }}" {% if topic and topic.frequency == opt %}selected{% endif %}>{{ opt }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="form-text text-muted">
+                            标准频率可从右侧选择；特殊频率（如"2小时"、"不定"）可直接输入。
+                        </div>
+                    </div>
+
+                    <!-- 负责人 -->
+                    <div class="mb-3">
+                        <label class="form-label">负责人</label>
+                        <div class="input-group">
+                            <input type="text" class="form-control" name="owner"
+                                   id="ownerInput"
+                                   value="{{ topic.owner if topic else '' }}"
+                                   placeholder="手动输入或右侧选择 ->" required>
+                            <select class="form-select" id="ownerSelect" style="max-width: 180px;" onchange="syncOwner()">
+                                <option value="">选择已有负责人</option>
+                                {% for owner in all_owners %}
+                                    <option value="{{ owner }}" {% if topic.owner == owner %}selected{% endif %}>{{ owner }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="form-text text-muted">
+                            您可以直接在左侧输入，也可以点击右侧下拉菜单快速填入。
+                        </div>
+                    </div>
+
+                    <!-- 联动关系提示 -->
+                    <div class="alert alert-info mt-3">
+                        <i class="bi bi-info-circle me-2"></i>
+                        <strong>提示：</strong>
+                        <ul class="mb-0 mt-2">
+                            <li>一级主题和二级主题可以直接输入，也可以从下拉框选择已有值</li>
+                            <li>选择已有值可以保持主题分类的一致性</li>
+                            <li>系统会自动记录您的输入，方便下次快速选择</li>
+                        </ul>
+                    </div>
+
+                    <div class="d-flex justify-content-end gap-2 mt-4">
+                        <a href="{{ url_for('topics') }}" class="btn btn-secondary">取消</a>
+                        <button type="submit" class="btn btn-success"><i class="bi bi-save"></i> 保存</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    // --- 一级主题同步函数 ---
+    function syncLevel1() {
+        var select = document.getElementById('level1_select');
+        var input = document.getElementById('level1_input');
+        if (select.value) {
+            input.value = select.value;
+        }
+    }
+
+    // --- 二级主题同步函数 ---
+    function syncLevel2() {
+        var select = document.getElementById('level2_select');
+        var input = document.getElementById('level2_input');
+        if (select.value) {
+            input.value = select.value;
+        }
+    }
+
+    // --- 负责人同步函数 ---
+    function syncOwner() {
+        var select = document.getElementById('ownerSelect');
+        var input = document.getElementById('ownerInput');
+        if (select.value) {
+            input.value = select.value;
+        }
+    }
+
+    // --- 采集频率同步函数 ---
+    function syncFrequency() {
+        var select = document.getElementById('freqSelect');
+        var input = document.getElementById('freqInput');
+        if (select.value) {
+            input.value = select.value;
+        }
+    }
+
+    // --- 页面加载时初始化 ---
+    document.addEventListener('DOMContentLoaded', function() {
+        // 如果编辑页面有已有值，尝试在下拉框中选中对应的选项
+        const level1Input = document.getElementById('level1_input');
+        const level2Input = document.getElementById('level2_input');
+        const ownerInput = document.getElementById('ownerInput');
+        const freqInput = document.getElementById('freqInput');
+
+        // 设置一级主题下拉框的选中状态
+        if (level1Input && level1Input.value) {
+            const level1Select = document.getElementById('level1_select');
+            const option = Array.from(level1Select.options).find(opt => opt.value === level1Input.value);
+            if (option) option.selected = true;
+        }
+
+        // 设置二级主题下拉框的选中状态
+        if (level2Input && level2Input.value) {
+            const level2Select = document.getElementById('level2_select');
+            const option = Array.from(level2Select.options).find(opt => opt.value === level2Input.value);
+            if (option) option.selected = true;
+        }
+
+        // 设置负责人下拉框的选中状态
+        if (ownerInput && ownerInput.value) {
+            const ownerSelect = document.getElementById('ownerSelect');
+            const option = Array.from(ownerSelect.options).find(opt => opt.value === ownerInput.value);
+            if (option) option.selected = true;
+        }
+
+        // 设置采集频率下拉框的选中状态
+        if (freqInput && freqInput.value) {
+            const freqSelect = document.getElementById('freqSelect');
+            const option = Array.from(freqSelect.options).find(opt => opt.value === freqInput.value);
+            if (option) option.selected = true;
+        }
+
+        // --- 添加实时搜索功能 ---
+        const level1Select = document.getElementById('level1_select');
+        const level2Select = document.getElementById('level2_select');
+        const ownerSelect = document.getElementById('ownerSelect');
+
+        if (level1Select) {
+            level1Select.addEventListener('focus', function() {
+                this.size = Math.min(10, this.options.length);
+            });
+            level1Select.addEventListener('blur', function() {
+                this.size = 1;
+            });
+        }
+
+        if (level2Select) {
+            level2Select.addEventListener('focus', function() {
+                this.size = Math.min(10, this.options.length);
+            });
+            level2Select.addEventListener('blur', function() {
+                this.size = 1;
+            });
+        }
+
+        if (ownerSelect) {
+            ownerSelect.addEventListener('focus', function() {
+                this.size = Math.min(10, this.options.length);
+            });
+            ownerSelect.addEventListener('blur', function() {
+                this.size = 1;
+            });
+        }
+    });
+
+    // --- 搜索功能：按需实现，如果选项很多的话 ---
+    // 这里预留了搜索功能的接口，如果需要可以添加
+    function searchDropdown(selectId, searchTerm) {
+        const select = document.getElementById(selectId);
+        const searchLower = searchTerm.toLowerCase();
+
+        Array.from(select.options).forEach(option => {
+            if (option.value === '') return; // 保留第一个空选项
+
+            const optionText = option.text.toLowerCase();
+            if (optionText.includes(searchLower)) {
+                option.style.display = '';
+            } else {
+                option.style.display = 'none';
+            }
+        });
+
+        // 展开下拉框显示筛选结果
+        select.size = Math.min(10, select.options.length);
+    }
+</script>
+
+<style>
+    /* 基础样式 - 确保下拉框始终可见 */
+    .form-select {
+        display: block !important;
+        visibility: visible !important;
+        opacity: 1 !important;
+        background-color: white !important;
+        color: #212529 !important;
+        position: static !important;
+        z-index: auto !important;
+    }
+
+    /* 输入组样式优化 */
+    .input-group {
+        position: relative;
+        display: flex;
+        flex-wrap: nowrap;
+        align-items: stretch;
+    }
+
+    .input-group > .form-control,
+    .input-group > .form-select {
+        position: relative;
+        flex: 1 1 auto;
+        width: 1%;
+        min-width: 0;
+        margin-bottom: 0;
+    }
+
+    .input-group > .form-select {
+        border-top-left-radius: 0;
+        border-bottom-left-radius: 0;
+        border-left: 1px solid #dee2e6;
+        max-width: 150px; /* 限制下拉框宽度 */
+    }
+
+    .input-group > .form-control:not(:first-child) {
+        border-top-right-radius: 0;
+        border-bottom-right-radius: 0;
+    }
+
+    /* 下拉框展开时的优化样式 */
+    .form-select[size] {
+        position: absolute !important;
+        z-index: 1050 !important; /* 提高 z-index，确保在最上层 */
+        background-color: white !important;
+        border: 1px solid #86b7fe !important;
+        border-radius: 0.375rem !important;
+        box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.15) !important;
+        width: auto !important;
+        min-width: 100% !important;
+        max-height: 300px !important;
+        overflow-y: auto !important;
+        overflow-x: hidden !important;
+        top: 100% !important;
+        left: 0 !important;
+        margin-top: 2px !important;
+    }
+
+    /* 确保下拉选项可见 */
+    .form-select option {
+        display: block !important;
+        visibility: visible !important;
+        padding: 8px 12px !important;
+        white-space: nowrap !important;
+        color: #212529 !important;
+        background-color: white !important;
+    }
+
+    .form-select option:hover,
+    .form-select option:focus {
+        background-color: #f8f9fa !important;
+        color: #0d6efd !important;
+    }
+
+    /* 禁用状态优化 */
+    .form-select:disabled,
+    .form-select[readonly] {
+        background-color: #e9ecef !important;
+        opacity: 1 !important;
+    }
+
+    /* 移除可能隐藏元素的样式 */
+    .form-select:not([size]) {
+        position: relative !important;
+        z-index: auto !important;
+    }
+
+    /* 确保下拉框在聚焦时正确显示 */
+    .form-select:focus {
+        border-color: #86b7fe !important;
+        box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.25) !important;
+        outline: 0 !important;
+    }
+
+    /* 移动端响应式优化 */
+    @media (max-width: 768px) {
+        .input-group > .form-select {
+            max-width: 120px !important;
+        }
+
+        .form-select[size] {
+            min-width: calc(100% + 120px) !important;
+            left: -120px !important;
+        }
+    }
+
+    /* 确保表单标签和提示文本可见 */
+    .form-label {
+        display: block !important;
+        margin-bottom: 0.5rem !important;
+        font-weight: 500 !important;
+    }
+
+    .form-text {
+        display: block !important;
+        margin-top: 0.25rem !important;
+        font-size: 0.875em !important;
+        color: #6c757d !important;
+    }
+</style>
+{% endblock %}

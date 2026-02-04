@@ -1,0 +1,691 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row mb-3">
+        <div class="col-12">
+            <h3 class="mb-3"><i class="bi bi-list-check text-primary"></i> 任务管理中心</h3>
+
+            <ul class="nav nav-tabs" id="taskTabs" role="tablist">
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link active" id="tab-gen-btn" data-bs-toggle="tab" data-bs-target="#tab-gen" type="button">
+                        <i class="bi bi-magic"></i> 任务生成
+                    </button>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link" id="tab-view-btn" data-bs-toggle="tab" data-bs-target="#tab-view" type="button">
+                        <i class="bi bi-eye"></i> 任务查看
+                        {% if ongoing_count > 0 %}
+                        <span class="badge bg-danger rounded-pill ms-1">{{ ongoing_count }}</span>
+                        {% endif %}
+                    </button>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link" id="tab-stat-btn" data-bs-toggle="tab" data-bs-target="#tab-stat" type="button">
+                        <i class="bi bi-bar-chart-line"></i> 任务统计
+                    </button>
+                </li>
+            </ul>
+        </div>
+    </div>
+
+    <div class="tab-content" id="taskTabsContent">
+
+        <div class="tab-pane fade show active" id="tab-gen" role="tabpanel">
+            <div class="card border-top-0 rounded-0 shadow-sm">
+                <div class="card-body">
+                    <div class="card bg-light mb-3">
+                        <div class="card-body py-3">
+                            <form method="GET" action="{{ url_for('task_management') }}" class="row g-3 align-items-center">
+                                <div class="col-md-8">
+                                    <div class="input-group">
+                                        <span class="input-group-text bg-white"><i class="bi bi-search"></i></span>
+                                        <input type="text" name="q" class="form-control"
+                                               placeholder="输入主题名称 / 合同编号...（模糊搜索）"
+                                               value="{{ request.args.get('q', '') }}">
+                                        <button type="submit" class="btn btn-primary px-4">搜索</button>
+                                    </div>
+                                </div>
+                                <div class="col-md-4 text-end">
+                                    <button type="button" class="btn btn-success" onclick="openBatchModal()">
+                                        <i class="bi bi-collection-play-fill"></i> 批量生成任务
+                                    </button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+
+                    {% if request.args.get('q') %}
+                    <div class="table-responsive">
+                        <table class="table table-hover align-middle">
+                            <thead class="table-light">
+                                <tr>
+                                    <th style="width: 40px;" class="text-center">
+                                        <input type="checkbox" class="form-check-input" id="checkAll" onchange="toggleAll(this)">
+                                    </th>
+                                    <th style="width: 60px;" class="text-center">序号</th>
+                                    <th>选项内容 (合同 - 服务 - 主题)</th>
+                                    <th style="width: 150px;" class="text-center">操作</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for item in results %}
+                                <tr>
+                                    <td class="text-center">
+                                        <input type="checkbox" class="form-check-input task-check"
+                                               value="{{ item.id }}"
+                                               data-contract="{{ item.contract_name }}"
+                                               data-theme="{{ item.theme_name }}"
+                                               data-owner="{{ item.owner }}"
+                                               data-frequency="{{ item.frequency }}">
+                                    </td>
+                                    <td class="text-center">{{ loop.index }}</td>
+                                    <td>
+                                        <div class="d-flex flex-column">
+                                            <span class="fw-bold text-dark mb-1">
+                                                <i class="bi bi-file-text me-1 text-secondary"></i> {{ item.contract_name }}
+                                            </span>
+                                            <span class="text-muted small ps-3">
+                                                <i class="bi bi-arrow-return-right me-1"></i> {{ item.service_content }}
+                                            </span>
+                                            <span class="text-primary small ps-5">
+                                                <i class="bi bi-tag-fill"></i> {{ item.theme_name }}
+                                                {% if item.owner %}
+                                                <span class="badge bg-light text-secondary border ms-2">
+                                                    <i class="bi bi-person"></i> {{ item.owner }}
+                                                </span>
+                                                {% endif %}
+                                            </span>
+                                        </div>
+                                    </td>
+                                    <td class="text-center">
+                                        <button type="button" class="btn btn-sm btn-outline-success"
+                                                onclick="openGenModal(this)"
+                                                data-task-id="{{ item.id }}"
+                                                data-contract="{{ item.contract_name }}"
+                                                data-theme="{{ item.theme_name }}"
+                                                data-frequency="{{ item.frequency }}"
+                                                data-owner="{{ item.owner }}">
+                                            生成
+                                        </button>
+                                    </td>
+                                </tr>
+                                {% else %}
+                                <tr><td colspan="4" class="text-center py-4 text-muted">未找到匹配项</td></tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% else %}
+                    <div class="text-center py-5 text-muted">请先搜索关键词以生成新任务</div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <div class="tab-pane fade" id="tab-view" role="tabpanel">
+            <div class="card border-top-0 rounded-0 shadow-sm">
+                <div class="card-body">
+
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <div class="d-flex align-items-center gap-3">
+                            <div class="alert alert-primary py-1 px-3 m-0 d-flex align-items-center">
+                                <i class="bi bi-activity me-2"></i>
+                                <div>进行中：<strong class="fs-5">{{ ongoing_count }}</strong></div>
+                            </div>
+                            <div class="ms-auto">
+                                <button type="button" class="btn btn-outline-danger btn-sm" onclick="batchDeleteTasks()">
+                                    <i class="bi bi-trash"></i> 批量删除
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="card bg-light border-0 mb-3">
+                        <div class="card-body py-2">
+                            <form method="GET" action="{{ url_for('task_management') }}" class="row g-2 align-items-center">
+                                <div class="col-md-3">
+                                    <div class="input-group input-group-sm">
+                                        <span class="input-group-text bg-white">合同</span>
+                                        <input type="text" name="view_contract" class="form-control"
+                                               placeholder="支持模糊搜索" value="{{ view_contract }}">
+                                    </div>
+                                </div>
+                                <div class="col-md-3">
+                                    <div class="input-group input-group-sm">
+                                        <span class="input-group-text bg-white">主题</span>
+                                        <input type="text" name="view_theme" class="form-control"
+                                               placeholder="支持模糊搜索" value="{{ view_theme }}">
+                                    </div>
+                                </div>
+                                <div class="col-md-2">
+                                    <div class="input-group input-group-sm">
+                                        <span class="input-group-text bg-white">人员</span>
+                                        <select name="view_owner" class="form-select">
+                                            <option value="">全部</option>
+                                            {% for owner in all_owners %}
+                                                <option value="{{ owner }}" {% if view_owner == owner %}selected{% endif %}>
+                                                    {{ owner }}
+                                                </option>
+                                            {% endfor %}
+                                        </select>
+                                    </div>
+                                </div>
+                                <div class="col-md-2">
+                                    <div class="input-group input-group-sm">
+                                        <span class="input-group-text bg-white">状态</span>
+                                        <select name="view_status" class="form-select">
+                                            <option value="all" {% if view_status == 'all' %}selected{% endif %}>全部</option>
+                                            <option value="pending" {% if view_status == 'pending' %}selected{% endif %}>🟡 进行中</option>
+                                            <option value="completed" {% if view_status == 'completed' %}selected{% endif %}>🟢 已完成</option>
+                                        </select>
+                                    </div>
+                                </div>
+                                <div class="col-md-2 text-end">
+                                    <div class="btn-group w-100">
+                                        <button type="submit" class="btn btn-sm btn-primary">
+                                            <i class="bi bi-funnel"></i> 筛选
+                                        </button>
+                                        <a href="{{ url_for('task_management') }}" class="btn btn-sm btn-outline-secondary" title="重置">
+                                            <i class="bi bi-arrow-counterclockwise"></i>
+                                        </a>
+                                    </div>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+
+                    <div class="table-responsive">
+                        <table class="table table-bordered table-hover align-middle">
+                            <thead class="table-light">
+                                <tr>
+                                    <th style="width: 40px;" class="text-center">
+                                        <input type="checkbox" class="form-check-input" id="checkAllView" onchange="toggleAllView(this)">
+                                    </th>
+                                    <th class="text-center" style="width: 60px;">序号</th>
+                                    <th style="width: 100px;" class="text-center">状态</th>
+                                    <th>任务信息 (合同/主题)</th>
+                                    <th>负责人</th>
+                                    <th>归属/截止/完成</th>
+                                    <th class="text-center">数据量</th>
+                                    <th style="width: 160px;" class="text-center">操作</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for task in all_instances %}
+                                <tr class="{{ 'table-success' if task.status == 'completed' else '' }}">
+                                    <td class="text-center">
+                                        <input type="checkbox" class="form-check-input task-view-check" value="{{ task.id }}">
+                                    </td>
+                                    <td class="text-center text-muted fw-bold">{{ loop.index }}</td>
+                                    <td class="text-center">
+                                        {% if task.status == 'completed' %}
+                                            <span class="badge bg-success">已完成</span>
+                                        {% else %}
+                                            <span class="badge bg-warning text-dark">进行中</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        <div class="fw-bold small">{{ task.contract_name }}</div>
+                                        <div class="text-primary small">{{ task.theme_name }}</div>
+                                    </td>
+                                    <td>{{ task.owner }}</td>
+                                    <td>
+                                        <div class="small">属：{{ task.belong_month }}</div>
+                                        <div class="small {{ 'text-danger fw-bold' if task.status!='completed' and task.deadline < today else '' }}">
+                                            止：{{ task.deadline }}
+                                        </div>
+                                        {% if task.status == 'completed' and task.finished_at %}
+                                            <div class="small text-success fw-bold">
+                                                完：{{ task.finished_at }}
+                                            </div>
+                                        {% endif %}
+                                    </td>
+                                    <td class="text-center fw-bold">{{ task.data_count }}</td>
+                                    <td class="text-center">
+                                        <div class="btn-group">
+                                            <button class="btn btn-sm btn-outline-primary" onclick="openEditModal(this)"
+                                                    data-id="{{ task.id }}"
+                                                    data-deadline="{{ task.deadline }}"
+                                                    data-status="{{ task.status }}"
+                                                    data-count="{{ task.data_count }}"
+                                                    data-finished-at="{{ task.finished_at or '' }}"
+                                                    data-owner="{{ task.owner }}"
+                                                    data-contract="{{ task.contract_name }}"
+                                                    data-theme="{{ task.theme_name }}"
+                                                    data-service="{{ task.task.service_content if task.task else '（服务内容已归档或删除）' }}">
+                                                <i class="bi bi-pencil-square"></i> 编辑
+                                            </button>
+                                            <button class="btn btn-sm btn-outline-danger" onclick="deleteTaskInstance({{ task.id }})">
+                                                <i class="bi bi-trash"></i> 删除
+                                            </button>
+                                        </div>
+                                    </td>
+                                </tr>
+                                {% else %}
+                                <tr><td colspan="8" class="text-center py-5 text-muted">暂无符合条件的任务记录</td></tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="tab-pane fade" id="tab-stat" role="tabpanel">
+            <div class="card border-top-0 rounded-0 shadow-sm">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <h5 class="m-0"><i class="bi bi-table text-primary"></i> 每日数据量透视表</h5>
+                        <form class="d-flex align-items-center" method="GET" action="{{ url_for('task_management') }}">
+                            <input type="hidden" name="active_tab" value="stat">
+                            <label class="me-2 fw-bold text-secondary">统计月份:</label>
+                            <input type="month" name="month" class="form-control form-control-sm me-2"
+                                   value="{{ stat_month }}" style="width: 150px;">
+                            <button type="submit" class="btn btn-sm btn-primary">
+                                <i class="bi bi-funnel"></i> 统计
+                            </button>
+                        </form>
+                    </div>
+
+                    <div class="table-responsive">
+                        <table class="table table-bordered table-sm text-center align-middle table-hover" style="font-size: 0.9rem;">
+                            <thead class="table-light">
+                                <tr>
+                                    <th style="min-width: 140px; background-color: #f8f9fa;">
+                                        <div class="d-flex justify-content-between">
+                                            <span class="small text-muted" style="margin-top: 10px;">完成时间</span>
+                                            <span class="small text-muted" style="margin-bottom: 10px;">负责人</span>
+                                        </div>
+                                    </th>
+                                    {% for owner in all_owners %}
+                                    <th class="py-2">{{ owner }}</th>
+                                    {% endfor %}
+                                    <th class="bg-light fw-bold text-dark">合计</th>
+                                </tr>
+                            </thead>
+                            <thead class="table-group-divider" style="border-top: 2px solid #aaa;">
+                                <tr class="table-light fw-bold" style="font-size: 1rem;">
+                                    <td class="text-end pe-3 text-center">月度总计</td>
+                                    {% for owner in all_owners %}
+                                    <td class="text-primary">{{ col_totals[owner] }}</td>
+                                    {% endfor %}
+                                    <td class="text-white bg-secondary">{{ grand_total }}</td>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for date in date_list %}
+                                <tr>
+                                    <td class="fw-bold text-secondary bg-light">{{ date }}</td>
+                                    {% for owner in all_owners %}
+                                        {% set val = stats_matrix[date][owner] %}
+                                        <td>
+                                            {% if val > 0 %}
+                                                <span class="text-dark fw-medium">{{ val }}</span>
+                                            {% else %}
+                                                <span class="text-muted small" style="color: #e0e0e0 !important;">-</span>
+                                            {% endif %}
+                                        </td>
+                                    {% endfor %}
+                                    <td class="fw-bold bg-light">
+                                        {% if row_totals[date] > 0 %}
+                                            {{ row_totals[date] }}
+                                        {% else %} - {% endif %}
+                                    </td>
+                                </tr>
+                                {% else %}
+                                <tr><td colspan="{{ all_owners|length + 2 }}" class="text-center py-5 text-muted">该月无完成数据</td></tr>
+                                {% endfor %}
+                            </tbody>
+
+                        </table>
+                    </div>
+                    <div class="mt-2 small text-muted">
+                        <i class="bi bi-info-circle"></i> 说明：数据基于“任务完成时间”进行归集；仅统计状态为“已完成”的数据量。
+                    </div>
+                </div>
+            </div>
+        </div>
+
+    </div>
+</div>
+
+<div class="modal fade" id="genModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header bg-success text-white">
+                <h5 class="modal-title">生成任务</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" id="gen_task_id">
+                <p><strong>合同：</strong><span id="gen_contract"></span></p>
+                <p><strong>主题：</strong><span id="gen_theme"></span></p>
+                <p><strong>负责人：</strong><span id="gen_owner" class="text-primary fw-bold"></span></p>
+                <p><strong>频率：</strong><span id="gen_freq"></span></p>
+                <hr>
+                <div class="row g-2">
+                    <div class="col-6">
+                        <label class="form-label small">所属年月</label>
+                        <input type="month" id="gen_month" class="form-control">
+                    </div>
+                    <div class="col-6">
+                        <label class="form-label small">截止时间</label>
+                        <input type="date" id="gen_deadline" class="form-control">
+                        <div class="form-text small text-end text-success" id="deadline_tip"></div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-success w-100" onclick="submitGen()">确认生成</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="batchGenModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-success text-white">
+                <h5 class="modal-title"><i class="bi bi-collection-play"></i> 批量生成任务</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="alert alert-info py-2">
+                    已选择 <strong id="batch_count" class="fs-5">0</strong> 个任务项
+                </div>
+                <div class="mb-3">
+                    <label class="form-label fw-bold">所属年月 <span class="text-danger">*</span></label>
+                    <input type="month" id="batch_month" class="form-control">
+                </div>
+                <div class="mb-3">
+                    <label class="form-label fw-bold">截止时间规则</label>
+                    <div class="form-check">
+                        <input class="form-check-input" type="radio" name="deadlineRadio" id="radioAuto" value="auto" checked>
+                        <label class="form-check-label" for="radioAuto">智能计算 (根据频率)</label>
+                    </div>
+                    <div class="form-check">
+                        <input class="form-check-input" type="radio" name="deadlineRadio" id="radioManual" value="manual">
+                        <label class="form-check-label" for="radioManual">统一指定日期</label>
+                    </div>
+                    <div id="batch_deadline_box" class="mt-2 ms-4" style="display:none;">
+                        <input type="date" id="batch_deadline_manual" class="form-control form-control-sm">
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                <button type="button" class="btn btn-success" onclick="submitBatchGen()">确认批量生成</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="editModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-primary text-white">
+                <h5 class="modal-title">编辑任务</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" id="edit_id">
+                <div class="bg-light p-3 rounded mb-3 border">
+                    <div class="mb-2">
+                        <small class="text-muted d-block">合同信息</small>
+                        <div class="text-dark" id="display_contract"></div>
+                        <div class="text-secondary" id="display_service"></div>
+                        <div class="text-primary" id="display_theme"></div>
+                    </div>
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label fw-bold">任务负责人</label>
+                    <select id="edit_owner" class="form-select">
+                        {% for owner in all_owners %}
+                            <option value="{{ owner }}">{{ owner }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label fw-bold">任务数据量</label>
+                    <input type="number" id="edit_count" class="form-control" placeholder="请输入条数">
+                </div>
+                <div class="mb-3">
+                    <label class="form-label fw-bold">任务状态</label>
+                    <select id="edit_status" class="form-select" onchange="autoFillFinishTime()">
+                        <option value="pending">🟡 进行中 </option>
+                        <option value="completed">🟢 已完成 </option>
+                    </select>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label fw-bold text-success">完成时间</label>
+                    <input type="date" id="edit_finished_at" class="form-control border-success">
+                </div>
+                <div class="mb-3">
+                    <label class="form-label fw-bold">截止时间变更</label>
+                    <input type="date" id="edit_deadline" class="form-control">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                <button type="button" class="btn btn-primary" onclick="submitEdit()">保存修改</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    // --- 页面加载：保持 Tab 状态 ---
+    document.addEventListener("DOMContentLoaded", function(){
+        const urlParams = new URLSearchParams(window.location.search);
+        // 如果有 view_* 参数，也默认停留在 查看Tab
+        if(urlParams.has('month')) {
+            new bootstrap.Tab(document.querySelector('#tab-stat-btn')).show();
+        } else if(urlParams.has('q')) {
+            new bootstrap.Tab(document.querySelector('#tab-gen-btn')).show();
+        } else {
+             new bootstrap.Tab(document.querySelector('#tab-view-btn')).show();
+        }
+
+        // 监听批量生成弹窗的单选框 (防止元素不存在报错)
+        const radios = document.getElementsByName('deadlineRadio');
+        if(radios.length > 0) {
+            radios.forEach(radio => {
+                radio.addEventListener('change', function() {
+                    const box = document.getElementById('batch_deadline_box');
+                    if(box) box.style.display = (this.value === 'manual') ? 'block' : 'none';
+                });
+            });
+        }
+    });
+
+    // ================== 1. 单个生成逻辑 ==================
+    function openGenModal(btn) {
+        document.getElementById('gen_task_id').value = btn.dataset.taskId;
+        document.getElementById('gen_contract').innerText = btn.dataset.contract;
+        document.getElementById('gen_theme').innerText = btn.dataset.theme;
+        document.getElementById('gen_owner').innerText = btn.dataset.owner || '未指定';
+        document.getElementById('gen_freq').innerText = btn.dataset.frequency || '未配置';
+
+        // 自动计算时间
+        const now = new Date();
+        const y = now.getFullYear();
+        const m = String(now.getMonth() + 1).padStart(2, '0');
+        document.getElementById('gen_month').value = `${y}-${m}`;
+
+        const freq = btn.dataset.frequency || '';
+        const deadlineDate = calculateDeadline(now, freq);
+        document.getElementById('gen_deadline').value = formatDate(deadlineDate);
+        document.getElementById('deadline_tip').innerText = `已根据 [${freq}] 自动推算`;
+
+        new bootstrap.Modal(document.getElementById('genModal')).show();
+    }
+
+    // 日期计算工具
+    function calculateDeadline(baseDate, freq) {
+        let target = new Date(baseDate);
+        if (!freq) freq = "";
+        if (freq.includes("月")) target.setMonth(target.getMonth() + 1);
+        else if (freq.includes("周")) target.setDate(target.getDate() + 7);
+        else if (freq.includes("季")) target.setMonth(target.getMonth() + 3);
+        else if (freq.includes("年")) target.setFullYear(target.getFullYear() + 1);
+        else if (freq.includes("日")) target.setDate(target.getDate() + 1);
+        else target.setDate(target.getDate() + 3);
+        return target;
+    }
+
+    function formatDate(date) {
+        const y = date.getFullYear();
+        const m = (date.getMonth() + 1).toString().padStart(2, '0');
+        const d = date.getDate().toString().padStart(2, '0');
+        return `${y}-${m}-${d}`;
+    }
+
+    function submitGen() {
+        const data = {
+            task_id: document.getElementById('gen_task_id').value,
+            contract_name: document.getElementById('gen_contract').innerText,
+            theme_name: document.getElementById('gen_theme').innerText,
+            owner: document.getElementById('gen_owner').innerText,
+            belong_month: document.getElementById('gen_month').value,
+            deadline: document.getElementById('gen_deadline').value
+        };
+        fetch('/api/generate_task', {
+            method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(data)
+        }).then(r => r.json()).then(res => {
+            alert(res.message); location.reload();
+        });
+    }
+
+    // ================== 2. 批量生成逻辑 ==================
+    function toggleAll(source) {
+        document.querySelectorAll('.task-check').forEach(cb => cb.checked = source.checked);
+    }
+
+    function openBatchModal() {
+        const selected = document.querySelectorAll('.task-check:checked');
+        if (selected.length === 0) { alert("请至少勾选一个任务！"); return; }
+
+        document.getElementById('batch_count').innerText = selected.length;
+
+        const now = new Date();
+        document.getElementById('batch_month').value = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
+        document.getElementById('radioAuto').checked = true;
+        const box = document.getElementById('batch_deadline_box');
+        if(box) box.style.display = 'none';
+
+        new bootstrap.Modal(document.getElementById('batchGenModal')).show();
+    }
+
+    function submitBatchGen() {
+        const month = document.getElementById('batch_month').value;
+        if (!month) { alert("请选择所属年月！"); return; }
+
+        const mode = document.querySelector('input[name="deadlineRadio"]:checked').value;
+        const manualDate = document.getElementById('batch_deadline_manual').value;
+        if (mode === 'manual' && !manualDate) { alert("请选择统一截止日期！"); return; }
+
+        const tasksPayload = [];
+        const now = new Date();
+        document.querySelectorAll('.task-check:checked').forEach(cb => {
+            const freq = cb.dataset.frequency || '';
+            let d = (mode === 'manual') ? manualDate : formatDate(calculateDeadline(now, freq));
+            tasksPayload.push({
+                task_id: cb.value,
+                contract_name: cb.dataset.contract,
+                theme_name: cb.dataset.theme,
+                owner: cb.dataset.owner,
+                belong_month: month,
+                deadline: d
+            });
+        });
+
+        fetch('/api/batch_generate_tasks', {
+            method: 'POST', headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ tasks: tasksPayload })
+        }).then(r => r.json()).then(res => {
+            alert(res.message); location.reload();
+        });
+    }
+
+    // ================== 3. 编辑任务逻辑 ==================
+    function openEditModal(btn) {
+        document.getElementById('edit_id').value = btn.dataset.id;
+        document.getElementById('edit_deadline').value = btn.dataset.deadline;
+        document.getElementById('edit_status').value = btn.dataset.status;
+        document.getElementById('edit_count').value = btn.dataset.count;
+        document.getElementById('edit_finished_at').value = btn.dataset.finishedAt;
+        document.getElementById('edit_owner').value = btn.dataset.owner;
+        new bootstrap.Modal(document.getElementById('editModal')).show();
+    }
+
+    function autoFillFinishTime() {
+        const status = document.getElementById('edit_status').value;
+        const timeInput = document.getElementById('edit_finished_at');
+        if (status === 'completed' && !timeInput.value) {
+            const now = new Date();
+            timeInput.value = formatDate(now);
+        }
+    }
+
+    function submitEdit() {
+        const data = {
+            id: document.getElementById('edit_id').value,
+            deadline: document.getElementById('edit_deadline').value,
+            status: document.getElementById('edit_status').value,
+            data_count: document.getElementById('edit_count').value,
+            finished_at: document.getElementById('edit_finished_at').value,
+            owner: document.getElementById('edit_owner').value
+        };
+        fetch('/api/update_task_instance', {
+            method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(data)
+        }).then(r => r.json()).then(res => {
+            alert(res.message); location.reload();
+        });
+    }
+
+    // ================== 4. 批量删除逻辑 ==================
+    function toggleAllView(source) {
+        document.querySelectorAll('.task-view-check').forEach(cb => cb.checked = source.checked);
+    }
+
+    function deleteTaskInstance(id) {
+        if (!confirm('⚠️ 确定要永久删除？')) return;
+        fetch('/api/delete_task_instance/' + id, { method: 'POST' })
+            .then(r => r.json()).then(res => {
+                if(res.status==='success') location.reload(); else alert(res.message);
+            });
+    }
+
+    function batchDeleteTasks() {
+        const selected = document.querySelectorAll('.task-view-check:checked');
+        if (selected.length === 0) { alert("请先勾选任务！"); return; }
+        const ids = Array.from(selected).map(cb => cb.value);
+        if (!confirm(`⚠️ 确定要删除这 ${ids.length} 条任务吗？`)) return;
+
+        fetch('/api/batch_delete_task_instances', {
+            method: 'POST', headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ ids: ids })
+        }).then(r => r.json()).then(res => {
+            alert(res.message); location.reload();
+        });
+    }
+    function openEditModal(btn) {
+        // 1. 填充表单数据 (可编辑)
+        document.getElementById('edit_id').value = btn.dataset.id;
+        document.getElementById('edit_deadline').value = btn.dataset.deadline;
+        document.getElementById('edit_status').value = btn.dataset.status;
+        document.getElementById('edit_count').value = btn.dataset.count;
+        document.getElementById('edit_finished_at').value = btn.dataset.finishedAt;
+        document.getElementById('edit_owner').value = btn.dataset.owner;
+
+        // 2. ✨ 填充基础信息 (只读展示)
+        document.getElementById('display_contract').innerText = btn.dataset.contract;
+        document.getElementById('display_service').innerText = btn.dataset.service;
+        document.getElementById('display_theme').innerText = btn.dataset.theme;
+
+        new bootstrap.Modal(document.getElementById('editModal')).show();
+    }
+</script>
+{% endblock %}

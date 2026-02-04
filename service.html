@@ -1,0 +1,1083 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="mapping-page-container px-3" style="max-width: 100%; overflow-x: hidden;">
+    <style>
+        /* 1. 彻底解决文字纵向排列（羊肉串）问题 */
+        .mapping-page-container .accordion-button {
+            display: flex !important;
+            align-items: center !important;
+            flex-wrap: nowrap !important;
+            padding-right: 2.5rem !important; /* 为右侧自带的箭头留出空间 */
+        }
+
+        .mapping-page-container .contract-title-text {
+            display: block !important;
+            flex: 1 1 auto !important;
+            min-width: 0 !important; /* 关键修复：允许在 Flex 容器中正确收缩 */
+            word-break: break-all;
+            text-align: left;
+            line-height: 1.4;
+            font-size: 1.1rem;
+            margin-right: 0.5rem;
+        }
+
+        /* 2. 隔离删除按钮：将其放在 header 内部但 button 外部 */
+        .mapping-page-container .header-wrapper {
+            position: relative;
+            display: flex;
+            align-items: center;
+            width: 100%;
+        }
+
+        .mapping-page-container .delete-btn-box {
+            position: absolute;
+            right: 3rem; /* 放在箭头左侧 */
+            z-index: 10;
+        }
+
+        /* 3. 固定图标和标签，不被挤扁 */
+        .mapping-page-container .fixed-icon { flex-shrink: 0 !important; width: 30px; }
+        .mapping-page-container .fixed-badges { flex-shrink: 0 !important; display: flex; gap: 0.5rem; }
+
+        /* 4. 视觉层级与服务内容样式 */
+        .mapping-page-container .service-item-box {
+            border-left: 5px solid #0d6efd !important;
+            background-color: #f8f9fa;
+            margin-bottom: 0.75rem;
+        }
+        /* 确保标题包装器不换行，并与侧边栏隔离 */
+        .header-wrapper {
+            display: flex !important;
+            align-items: center !important;
+            width: 100%;
+            background-color: #fff;
+            border: 1px solid #dee2e6;
+            border-radius: 0.375rem;
+            overflow: hidden;
+        }
+
+        /* 解决文字纵向排列的关键：min-width: 0 */
+        .contract-title-text {
+            flex: 1 1 auto !important;
+            min-width: 0 !important;
+            text-align: left;
+            word-break: break-all;
+            line-height: 1.4;
+            margin-right: 1rem;
+        }
+
+        /* 删除按钮区域固定宽度，不参与挤压 */
+        .delete-btn-box {
+            flex-shrink: 0 !important;
+            padding: 0 1rem;
+            border-left: 1px solid #eee;
+        }
+
+        /* 统计标签不缩放 */
+        .fixed-badges {
+            flex-shrink: 0 !important;
+            gap: 0.5rem;
+        }
+        /* 快速关联主题下拉框样式 */
+    #quick_theme_select.show-dropdown {
+        height: auto;
+        border-radius: 0.375rem 0.375rem 0 0;
+        border-bottom: none;
+    }
+
+    /* 下拉框选项样式 */
+    #quick_theme_select option {
+        padding: 0.5rem;
+        border-bottom: 1px solid #dee2e6;
+    }
+
+    /* 高亮匹配的文本 */
+    .highlight-match {
+        background-color: yellow;
+        font-weight: bold;
+    }
+
+    /* 主题详情区域动画 */
+    #theme_info_display {
+        transition: all 0.3s ease;
+    }
+        /* 快速关联模态框样式 */
+    #quickAddModal .modal-body {
+        max-height: 70vh;
+        overflow-y: auto;
+    }
+
+    #quickAddModal .form-select-sm {
+        font-size: 0.875rem;
+        padding: 0.25rem 0.5rem;
+    }
+
+    #quickAddModal .card-header {
+        font-size: 0.875rem;
+    }
+
+    #quickAddModal .alert-sm {
+        font-size: 0.8125rem;
+        padding: 0.5rem 0.75rem;
+    }
+        /* 多选下拉框样式 */
+    #quickAddModal select[multiple] {
+        min-height: 120px;
+        max-height: 200px;
+        overflow-y: auto;
+    }
+
+    /* 已选主题标签样式 */
+    #selected_themes_list .badge {
+        padding: 0.25rem 0.5rem;
+        margin: 0.125rem;
+        font-size: 0.8125rem;
+    }
+
+    /* 移除按钮样式 */
+    #selected_themes_list .badge button {
+        font-size: 0.75rem;
+        line-height: 1;
+        vertical-align: middle;
+    }
+
+    /* 提交按钮样式 */
+    #quickAddModal .modal-footer .btn-success {
+        min-width: 120px;
+    }
+    </style>
+
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h3 class="m-0"><i class="bi bi-diagram-3-fill text-primary"></i> 服务内容与主题对应透视</h3>
+        <div class="btn-group">
+            <button type="button" class="btn btn-outline-success btn-sm ms-1"
+                    data-bs-toggle="modal" data-bs-target="#importMappingModal"
+                    data-toggle="modal" data-target="#importMappingModal">
+                <i class="bi bi-file-earmark-excel"></i> 导入 Excel
+            </button>
+
+            <button type="button" class="btn btn-primary btn-sm"
+                    data-bs-toggle="modal" data-bs-target="#addMappingModal"
+                    data-toggle="modal" data-target="#addMappingModal">
+                <i class="bi bi-plus-circle"></i> 新增对应
+            </button>
+        </div>
+    </div>
+
+    <div class="card mb-4 border-0 shadow-sm bg-light">
+        <div class="card-body py-2">
+            <form class="row g-2 align-items-center" method="get">
+                <div class="col-auto">
+                    <input type="text" name="contract" class="form-control form-control-sm" placeholder="搜索合同名称..." value="{{ request.args.get('contract','') }}">
+                </div>
+                <div class="col-auto">
+                    <button type="submit" class="btn btn-sm btn-primary">筛选</button>
+                    <a href="{{ url_for('service_mapping') }}" class="btn btn-sm btn-outline-secondary">重置</a>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div class="accordion" id="contractAccordion">
+        {% for contract_name, services in grouped_data.items() %}
+        {% set parent_idx = loop.index %}
+        <div class="accordion-item mb-3 border rounded overflow-hidden">
+            <h2 class="accordion-header mb-2">
+                <div class="header-wrapper shadow-sm">
+                    <button class="accordion-button collapsed d-flex align-items-center flex-nowrap py-3"
+                            type="button"
+                            data-bs-toggle="collapse"
+                            data-bs-target="#collapseC{{ parent_idx }}">
+                        <i class="bi bi-file-earmark-text-fill text-primary fixed-icon fs-4 me-3 flex-shrink-0"></i>
+
+                        <strong class="contract-title-text text-dark" data-name="{{ contract_name }}">{{ contract_name }}</strong>
+                        {% set matched_contract = contract_map.get(contract_name) %}
+                        {% if matched_contract %}
+                            <div class="small text-muted fw-normal mt-1" style="font-size: 0.85em;">
+
+                                <span title="合同编号">{{ matched_contract.contract_code or '无编号' }}</span>
+                                <span class="mx-1">|</span>
+                                <span title="甲方">{{ matched_contract.party_a or '-' }}</span>
+                                <span class="mx-1">|</span>
+                                <span title="乙方">{{ matched_contract.party_b or '-' }}</span>
+                            </div>
+                        {% else %}
+                            <div class="small text-danger fw-normal mt-1" style="font-size: 0.8em;">
+                                ⚠️ 未找到关联的合同档案
+                            </div>
+                        {% endif %}
+
+                        <div class="fixed-badges d-none d-md-flex pe-3 me-3 ">
+                            <span class="badge bg-primary-subtle text-primary border rounded-pill">{{ services|length }} 项服务内容</span>
+                            <span class="badge bg-info-subtle text-info border rounded-pill">{{ theme_counts[contract_name] }} 个对应主题      </span>
+                        </div>
+                    </button>
+
+                    <div class="delete-btn-box ">
+                        <button type="button"
+                                class="btn btn-sm text-danger border-0 p-2"
+                                title="删除此合同及关联记录"
+                                onclick="confirmDeleteContract('{{ contract_name|escape }}')">
+                            <i class="bi bi-trash3 fs-5"></i>
+                        </button>
+                    </div>
+                </div>
+            </h2>
+
+            <div id="collapseC{{ parent_idx }}" class="accordion-collapse collapse" data-bs-parent="#contractAccordion">
+                <div class="accordion-body bg-light p-3">
+                    <div class="accordion accordion-flush">
+                        {% for service_text, theme_records in services.items() %}
+                        {% set child_idx = loop.index %}
+                        <div class="accordion-item  service-item-box border rounded shadow-sm">
+                            <h2 class="accordion-header d-flex align-items-center bg-white border rounded shadow-sm mb-2">
+                                <button class="accordion-button collapsed py-2 "
+                                        type="button"
+                                        data-bs-toggle="collapse"
+                                        data-bs-target="#collapseS{{ parent_idx }}-{{ child_idx }}">
+                                    <div class="d-flex align-items-center flex-nowrap w-100  flex-nowrap pe-2">
+
+                                        <span class="text-primary text-truncate " data-name="{{ service_text }}" style="min-width: 0; font-size: 0.95rem;">
+                                            <i class="bi bi-gear-wide-connected me-1"></i> {{ service_text }}
+                                        </span>
+
+                                            <span class="badge bg-white text-dark border rounded-pill ms-auto me-2">
+                                                {{ theme_records|length }} 个对应主题
+                                            </span>
+
+                                    </div>
+                                </button>
+                                        <div class="pe-3 ps-2 bg-white border-start" style="height: 24px; display: flex; align-items: center;">
+                                            <span class="text-success p-0"
+                                                  style="cursor: pointer; line-height: 1;"
+                                                  title="快速添加主题"
+                                                  onclick="quickAddTheme('{{ contract_name|escape }}', '{{ service_text|escape }}')">
+                                                <i class="bi bi-plus-circle-fill fs-5"></i>
+                                            </span>
+                                        </div>
+                            </h2>
+                            <div id="collapseS{{ parent_idx }}-{{ child_idx }}" class="accordion-collapse collapse">
+                                <div class="accordion-body bg-white py-1">
+                                    <ul class="list-group list-group-flush">
+                                        {% for record in theme_records %}
+                                        <li class="list-group-item d-flex justify-content-between align-items-center py-2 border-bottom">
+                                            <div class="text-muted small"><i class="bi bi-tag-fill me-2 text-info"></i>{{ record.theme_name }}</div>
+                                            <a href="{{ url_for('unified_delete', type='mapping', id=record.id) }}" class="text-danger" onclick="return confirm('确定删除吗？')"><i class="bi bi-x-circle"></i></a>
+                                        </li>
+                                        {% endfor %}
+                                    </ul>
+                                </div>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+<div class="modal fade" id="addMappingModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content border-0 shadow">
+            <div class="modal-header bg-primary text-white">
+                <h5 class="modal-title"><i class="bi bi-plus-circle"></i> 新增对应关系</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+
+            <form action="{{ url_for('add_service_mapping') }}" method="post">
+                <div class="modal-body">
+                    <div class="alert alert-info py-2 small">
+                        <i class="bi bi-info-circle"></i> 数据将直接存入服务内容库 (Task表)
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">合同名称 <span class="text-danger">*</span></label>
+
+                        <div class="card card-body bg-light py-2 px-3 mb-2">
+                            <div class="small text-muted mb-1"><i class="bi bi-funnel"></i> 快速筛选合同：</div>
+                            <div class="row g-2">
+                                <div class="col-4">
+                                    <input type="text" id="filterCode" class="form-control form-control-sm"
+                                           placeholder="搜编号..." onkeyup="filterContracts()">
+                                </div>
+                                <div class="col-4">
+                                    <input type="text" id="filterPA" class="form-control form-control-sm"
+                                           placeholder="搜甲方..." onkeyup="filterContracts()">
+                                </div>
+                                <div class="col-4">
+                                    <input type="text" id="filterPB" class="form-control form-control-sm"
+                                           placeholder="搜乙方..." onkeyup="filterContracts()">
+                                </div>
+                            </div>
+                        </div>
+
+                        <select name="contract_name" id="contractSelect" class="form-select" required>
+                            <option value="">-- 请选择合同 --</option>
+                            {% for c in contract_map.values() %}
+                                <option value="{{ c.name }}"
+                                        data-code="{{ c.contract_code or '' }}"
+                                        data-pa="{{ c.party_a or '' }}"
+                                        data-pb="{{ c.party_b or '' }}">
+                                    {{ c.name }}
+                                    {% if c.contract_code %}({{ c.contract_code }}){% endif %}
+                                </option>
+                            {% endfor %}
+                        </select>
+                        <div class="form-text" id="matchCountMsg"></div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">服务内容 <span class="text-danger">*</span></label>
+                        <textarea name="service_content" class="form-control" rows="3" placeholder="描述具体的服务要求..." required></textarea>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">主题名称 <span class="text-danger">*</span></label>
+
+                        <div class="input-group mb-2">
+                            <span class="input-group-text"><i class="bi bi-keyboard"></i></span>
+                            <input type="text" name="theme_names" id="themeNameInput" class="form-control"
+                                   placeholder="可直接输入，或从下方筛选后点击选择" required>
+                        </div>
+
+                        <div class="card card-body bg-light py-2 px-3">
+                            <div class="d-flex justify-content-between align-items-center mb-2">
+                                <small class="text-muted"><i class="bi bi-funnel"></i> 辅助筛选器 (选中自动填入)</small>
+                                <small class="text-primary" id="topicMatchMsg"></small>
+                            </div>
+
+                            <div class="row g-2 mb-2">
+                                <div class="col-4">
+                                    <input type="text" id="filterTID" class="form-control form-control-sm"
+                                           placeholder="搜ID..." onkeyup="filterTopics()">
+                                </div>
+                                <div class="col-4">
+                                    <input type="text" id="filterL1" class="form-control form-control-sm"
+                                           placeholder="搜一级..." onkeyup="filterTopics()">
+                                </div>
+                                <div class="col-4">
+                                    <input type="text" id="filterL2" class="form-control form-control-sm"
+                                           placeholder="搜二级..." onkeyup="filterTopics()">
+                                </div>
+                            </div>
+
+                            <select id="topicHelperSelect" class="form-select form-select-sm"  onchange="pickTopic(this)">
+                                <option value="" disabled selected>-- 筛选结果将显示在这里 --</option>
+                                {% for t in all_topics %}
+                                    <option value="{{ t.name }}"
+                                            data-tid="{{ t.theme_id or '' }}"
+                                            data-l1="{{ t.level1_id or '' }}"
+                                            data-l2="{{ t.level2_id or '' }}">
+                                        {{ t.name }}
+                                        {% if t.theme_id %}(ID: {{ t.theme_id }}){% endif %}
+                                    </option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                    <button type="submit" class="btn btn-primary">保存</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+<!---导入Excel模态栏--->
+<div class="modal fade" id="importMappingModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-xl">
+        <div class="modal-content">
+            <div class="modal-header bg-success text-white">
+                <h5 class="modal-title"><i class="bi bi-file-earmark-excel-fill me-2"></i>批量导入</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+
+            <form action="{{ url_for('import_task_excel') }}" method="POST" enctype="multipart/form-data">
+                <div class="modal-body p-4">
+                    <div class="row g-4">
+
+                        <div class="col-lg-5">
+                            <div class="card h-100 border-0 bg-light">
+                                <div class="card-body">
+                                    <h6 class="fw-bold text-success mb-3">
+                                        <i class="bi bi-list-check me-1"></i> 第一步：检查数据规范
+                                    </h6>
+                                    <ul class="list-group list-group-flush bg-transparent small">
+                                        <li class="list-group-item bg-transparent px-0">
+                                            <span class="badge bg-danger me-2">必填</span>
+                                            <strong>合同名称、服务内容、主题名称</strong>
+                                        </li>
+                                        <li class="list-group-item bg-transparent px-0">
+                                            <i class="bi bi-link-45deg text-primary me-1"></i>
+                                            <strong>自动关联：</strong>系统会根据“合同名称”自动查找并关联已有合同。请确保名称完全一致（包括括号、空格）。
+                                        </li>
+                                        <li class="list-group-item bg-transparent px-0">
+                                            <i class="bi bi-exclamation-triangle text-warning me-1"></i>
+                                            <strong>注意：</strong>如果合同名称在系统中不存在，该服务内容将显示为“未关联合同”。
+                                        </li>
+                                    </ul>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="col-lg-7">
+                            <div class="border rounded p-3 h-100">
+                                <div class="d-flex justify-content-between align-items-center mb-3">
+                                    <h6 class="fw-bold text-primary m-0">
+                                        <i class="bi bi-table me-1"></i> 模板格式预览
+                                    </h6>
+                                    <a href="{{ url_for('download_task_template') }}" class="btn btn-sm btn-outline-primary">
+                                        <i class="bi bi-download me-1"></i> 下载标准 Excel 模板
+                                    </a>
+                                </div>
+
+                                <div class="table-responsive border rounded bg-white" style="font-size: 12px;">
+                                    <table class="table table-bordered table-sm mb-0 text-center text-nowrap">
+                                        <thead class="table-light">
+                                            <tr>
+                                                <th class="text-danger">合同名称*</th>
+                                                <th class="text-danger">服务内容*</th>
+                                                <th class="text-danger">主题名称*</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            <tr>
+                                                <td>XX省数据采购项目</td>
+                                                <td>提供全省高校科研数据...</td>
+                                                <td>科研数据</td>
+                                            </tr>
+                                            <tr>
+                                                <td>智慧城市建设合同</td>
+                                                <td>提供实时水质监测API...</td>
+                                                <td>水质监测</td>
+                                            </tr>
+                                            <tr>
+                                                <td class="text-muted">...</td>
+                                                <td class="text-muted">...</td>
+                                                <td class="text-muted">...</td>
+                                            </tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                                <div class="form-text mt-2 text-muted">
+                                    <small>* 红色标题为必填列，请勿修改模板表头。</small>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <hr class="my-4">
+
+                    <div class="row justify-content-center">
+                        <div class="col-lg-8 text-center">
+                            <h6 class="fw-bold mb-3">第二步：上传填写好的文件</h6>
+                            <div class="input-group input-group-lg">
+                                <input type="file" class="form-control" name="file" accept=".xlsx, .xls" required>
+                                <button type="submit" class="btn btn-success px-5">
+                                    <i class="bi bi-cloud-upload-fill me-1"></i> 确认导入
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+<!-- 快速关联主题模态框 -->
+<div class="modal fade" id="quickAddModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content border-0 shadow">
+            <div class="modal-header bg-success text-white py-2">
+                <h6 class="modal-title small"><i class="bi bi-lightning-fill"></i> 快速关联主题（可多选）</h6>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <form id="quickAddForm" action="{{ url_for('add_service_mapping') }}" method="post">
+                <div class="modal-body">
+                    <!-- 合同和服务信息 -->
+                    <div class="alert alert-info alert-sm py-2 mb-3">
+                        <div class="d-flex align-items-center">
+                            <i class="bi bi-info-circle me-2"></i>
+                            <div>
+                                    <strong>合同名称：</strong><span id="quick_contract_display" class="text-primary"></span>
+                                    <strong class="ms-3">服务内容：</strong><span id="quick_service_display" class="text-primary"></span>
+
+                            </div>
+                        </div>
+                    </div>
+
+                    <input type="hidden" name="contract_name" id="quick_c_name">
+                    <input type="hidden" name="service_content" id="quick_s_content">
+
+                    <!-- 三级联动筛选区域 -->
+                    <div class="card border-light mb-3">
+                        <div class="card-header bg-light py-2">
+                            <h6 class="mb-0"><i class="bi bi-funnel"></i> 主题筛选</h6>
+                        </div>
+                        <div class="card-body p-3">
+                            <div class="row g-3">
+                                <!-- 一级主题 -->
+                                <div class="col-md-4">
+                                    <label class="form-label small fw-bold mb-1">一级主题</label>
+                                    <select id="quick_level1" class="form-select form-select-sm" onchange="handleQuickTopicChange('level1')">
+                                        <option value="">-- 所有一级主题 --</option>
+                                        {% for p in all_parents %}
+                                        <option value="{{ p }}">{{ p }}</option>
+                                        {% endfor %}
+                                    </select>
+                                </div>
+
+                                <!-- 二级主题 -->
+                                <div class="col-md-4">
+                                    <label class="form-label small fw-bold mb-1">二级主题</label>
+                                    <select id="quick_level2" class="form-select form-select-sm" onchange="handleQuickTopicChange('level2')">
+                                        <option value="">-- 所有二级主题 --</option>
+                                        {% for l2 in all_level2_list %}
+                                        <option value="{{ l2 }}">{{ l2 }}</option>
+                                        {% endfor %}
+                                    </select>
+                                </div>
+
+                                <!-- 主题名称 - 多选 -->
+                                <div class="col-md-4">
+                                    <label class="form-label small fw-bold mb-1">主题名称 <span class="text-danger">*</span></label>
+                                    <select name="theme_names" id="quick_name" class="form-select form-select-sm" multiple onchange="handleMultiSelect()" >
+                                        <option value="">-- 请选择主题 --</option>
+                                        {% for t_name in all_topic_names %}
+                                        <option value="{{ t_name }}">{{ t_name }}</option>
+                                        {% endfor %}
+                                    </select>
+                                    <div class="mt-1">
+                                        <small class="text-muted">按住 Ctrl 键可多选，或拖选多个主题</small>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- 重置按钮 -->
+                            <div class="mt-3 text-end">
+                                <button type="button" class="btn btn-sm btn-outline-secondary" onclick="resetQuickFilters()">
+                                    <i class="bi bi-arrow-clockwise"></i> 重置筛选
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 已选主题展示区域 -->
+                    <div id="selected_themes_display" class="card border-warning mb-3" style="display: none;">
+                        <div class="card-header bg-warning text-dark py-2">
+                            <div class="d-flex justify-content-between align-items-center">
+                                <h6 class="mb-0"><i class="bi bi-check2-circle"></i> 已选主题 <span id="selected_count" class="badge bg-danger">0</span></h6>
+                                <button type="button" class="btn btn-sm btn-outline-danger btn-sm" onclick="clearAllSelections()">
+                                    <i class="bi bi-trash"></i> 清空
+                                </button>
+                            </div>
+                        </div>
+                        <div class="card-body p-2">
+                            <div id="selected_themes_list" class="d-flex flex-wrap gap-1">
+                                <!-- 已选主题将在这里动态生成 -->
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 主题详情展示 -->
+                    <div id="theme_info_display" class="card border-primary mb-3" style="display: none;">
+                        <div class="card-header bg-primary text-white py-2">
+                            <div class="d-flex justify-content-between align-items-center">
+                                <h6 class="mb-0"><i class="bi bi-info-circle"></i> 主题详情</h6>
+                                <span id="detail_theme_id" class="badge bg-light text-dark">ID</span>
+                            </div>
+                        </div>
+                        <div class="card-body p-3">
+                            <div class="row g-2">
+                                <div class="col-12 mb-2">
+                                    <span class="text-muted">负责人：</span>
+                                    <span id="detail_owner" class="fw-bold text-dark ms-2">-</span>
+                                </div>
+                                <div class="col-md-6">
+                                    <span class="text-muted">采集方式：</span>
+                                    <span id="detail_method" class="ms-2">-</span>
+                                </div>
+                                <div class="col-md-6">
+                                    <span class="text-muted">频率：</span>
+                                    <span id="detail_frequency" class="ms-2">-</span>
+                                </div>
+                                <div class="col-md-6">
+                                    <span class="text-muted">一级主题：</span>
+                                    <span id="detail_level1" class="ms-2">-</span>
+                                </div>
+                                <div class="col-md-6">
+                                    <span class="text-muted">二级主题：</span>
+                                    <span id="detail_level2" class="ms-2">-</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer py-2 border-0">
+                    <button type="button" class="btn btn-sm btn-light" data-bs-dismiss="modal">取消</button>
+                    <button type="submit" class="btn btn-sm btn-success" id="submitBtn">确认添加关联</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+<div class="modal fade" id="deleteContractModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow">
+            <div class="modal-body text-center py-4">
+                <i class="bi bi-exclamation-triangle-fill text-danger display-4"></i>
+                <h5 class="mt-3">操作确认</h5>
+                <p>您确定要删除合同：<br><strong id="del_contract_display" class="text-primary"></strong> 吗？</p>
+                <p class="text-danger small">（此操作将永久清理该合同下的所有服务内容及主题映射）</p>
+
+                <form action="{{ url_for('remove_contract_group') }}" method="post">
+                    <input type="hidden" name="contract_name" id="del_contract_input">
+                    <div class="mt-4">
+                        <button type="button" class="btn btn-light px-4 me-2" data-bs-dismiss="modal">取消</button>
+                        <button type="submit" class="btn btn-danger px-4">确认永久删除</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+<script>
+    console.log("Service Mapping JS Loaded.");
+
+    // --- 快速关联主题的三级联动逻辑 ---
+
+    // 从模板传递主题关系数据
+    const quickTopicRelations = {{ topic_relations | tojson }};
+
+    // 备份原始选项
+    let quickOriginalOptions = {
+        level1: [],
+        level2: [],
+        names: []
+    };
+
+    // 存储当前选中的主题
+    let selectedThemes = new Set();
+
+    // 初始化快速关联弹窗的筛选器
+    function initQuickFilters() {
+        // 备份原始选项
+        document.querySelectorAll('#quick_level1 option').forEach(opt => {
+            if (opt.value) quickOriginalOptions.level1.push({value: opt.value, text: opt.text});
+        });
+        document.querySelectorAll('#quick_level2 option').forEach(opt => {
+            if (opt.value) quickOriginalOptions.level2.push({value: opt.value, text: opt.text});
+        });
+        document.querySelectorAll('#quick_name option').forEach(opt => {
+            if (opt.value && opt.value !== '') quickOriginalOptions.names.push({value: opt.value, text: opt.text});
+        });
+    }
+
+    // 核心三级联动函数
+    function handleQuickTopicChange(source) {
+        const el1 = document.getElementById('quick_level1');
+        const el2 = document.getElementById('quick_level2');
+        const elN = document.getElementById('quick_name');
+
+        const val1 = el1.value;
+        const val2 = el2.value;
+        const valN = Array.from(elN.selectedOptions).map(opt => opt.value);
+
+        // 定义过滤后的数据集，初始为全部数据
+        let filtered = quickTopicRelations;
+
+        // 核心策略：以"最后操作"的那个下拉框为基准进行过滤
+        if (source === 'level1' && val1) {
+            filtered = quickTopicRelations.filter(item => item.p === val1);
+        } else if (source === 'level2' && val2) {
+            filtered = quickTopicRelations.filter(item => item.l2 === val2);
+        } else if (source === 'name' && valN.length > 0) {
+            // 对于多选，如果选择了主题，则只显示选中的主题
+            filtered = quickTopicRelations.filter(item => valN.includes(item.n));
+        }
+
+        // 计算出各列新的有效选项列表 (去重 + 排序)
+        const validL1 = [...new Set(filtered.map(item => item.p))].filter(v => v).sort();
+        const validL2 = [...new Set(filtered.map(item => item.l2))].filter(v => v).sort();
+        const validN = [...new Set(filtered.map(item => item.n))].filter(v => v).sort();
+
+        // 更新下拉框选项
+        if (source !== 'level1') updateQuickSelect(el1, validL1, val1);
+        if (source !== 'level2') updateQuickSelect(el2, validL2, val2);
+        if (source !== 'name') updateQuickMultiSelect(elN, validN, valN);
+    }
+
+    // 辅助函数：更新下拉框的 <option>
+    function updateQuickSelect(selectEl, validItems, currentValue) {
+        // 保留第一项
+        const placeholder = selectEl.options[0].text;
+
+        // 重建 HTML
+        let html = `<option value="">${placeholder}</option>`;
+        validItems.forEach(item => {
+            if (item) {
+                const isSelected = (item === currentValue) ? 'selected' : '';
+                html += `<option value="${item}" ${isSelected}>${item}</option>`;
+            }
+        });
+        selectEl.innerHTML = html;
+
+        // 如果旧值在新列表中不存在了，则置空
+        if (currentValue && !validItems.includes(currentValue)) {
+            selectEl.value = "";
+        }
+    }
+
+    // 辅助函数：更新多选下拉框的 <option>
+    function updateQuickMultiSelect(selectEl, validItems, selectedValues) {
+        // 保留第一项（提示选项）
+        const placeholder = "-- 请选择主题 --";
+
+        // 重建 HTML
+        let html = `<option value="">${placeholder}</option>`;
+        validItems.forEach(item => {
+            if (item) {
+                const isSelected = selectedValues.includes(item) ? 'selected' : '';
+                html += `<option value="${item}" ${isSelected}>${item}</option>`;
+            }
+        });
+        selectEl.innerHTML = html;
+
+        // 更新已选主题显示
+        handleMultiSelect();
+    }
+
+    // 处理多选变化
+    function handleMultiSelect() {
+        const selectEl = document.getElementById('quick_name');
+        const selectedOptions = Array.from(selectEl.selectedOptions);
+        const selectedValues = selectedOptions.filter(opt => opt.value !== '').map(opt => opt.value);
+
+        // 更新已选主题集合
+        selectedThemes = new Set(selectedValues);
+
+        // 显示或隐藏已选主题区域
+        const displayArea = document.getElementById('selected_themes_display');
+        const selectedList = document.getElementById('selected_themes_list');
+        const selectedCount = document.getElementById('selected_count');
+
+        if (selectedThemes.size > 0) {
+            displayArea.style.display = 'block';
+            selectedCount.textContent = selectedThemes.size;
+
+            // 清空列表
+            selectedList.innerHTML = '';
+
+            // 添加已选主题标签
+            selectedThemes.forEach(themeName => {
+                const topic = topicsMap[themeName];
+                const themeId = topic ? topic.theme_id : '';
+
+                const badge = document.createElement('span');
+                badge.className = 'badge bg-primary-subtle text-primary border border-primary rounded-pill';
+                badge.innerHTML = `
+                    ${themeName}${themeId ? ` (${themeId})` : ''}
+                    <button type="button" class="btn btn-link btn-sm text-danger p-0 ms-1"
+                            onclick="removeSelectedTheme('${themeName}')" style="text-decoration: none;">
+                        <i class="bi bi-x"></i>
+                    </button>
+                `;
+                selectedList.appendChild(badge);
+            });
+
+            // 更新提交按钮文本
+            document.getElementById('submitBtn').textContent = `确认添加 ${selectedThemes.size} 个主题关联`;
+        } else {
+            displayArea.style.display = 'none';
+            document.getElementById('submitBtn').textContent = '确认添加关联';
+        }
+
+        // 如果有且仅有一个选中项，显示主题详情
+        if (selectedThemes.size === 1) {
+            const themeName = Array.from(selectedThemes)[0];
+            updateQuickThemeDetails(themeName);
+        } else {
+            document.getElementById('theme_info_display').style.display = 'none';
+        }
+    }
+
+    // 从已选主题中移除单个主题
+    function removeSelectedTheme(themeName) {
+        const selectEl = document.getElementById('quick_name');
+        const option = Array.from(selectEl.options).find(opt => opt.value === themeName);
+
+        if (option) {
+            option.selected = false;
+            selectedThemes.delete(themeName);
+            handleMultiSelect();
+        }
+    }
+
+    // 清空所有已选主题
+    function clearAllSelections() {
+        const selectEl = document.getElementById('quick_name');
+        Array.from(selectEl.options).forEach(opt => {
+            opt.selected = false;
+        });
+        selectedThemes.clear();
+        handleMultiSelect();
+    }
+
+    // 重置筛选器
+    function resetQuickFilters() {
+        const el1 = document.getElementById('quick_level1');
+        const el2 = document.getElementById('quick_level2');
+        const elN = document.getElementById('quick_name');
+
+        el1.value = "";
+        el2.value = "";
+
+        // 恢复所有原始选项
+        updateQuickSelect(el1, quickOriginalOptions.level1.map(opt => opt.value), '');
+        updateQuickSelect(el2, quickOriginalOptions.level2.map(opt => opt.value), '');
+        updateQuickMultiSelect(elN, quickOriginalOptions.names.map(opt => opt.value), []);
+
+        // 清空已选主题
+        clearAllSelections();
+
+        // 隐藏主题详情
+        document.getElementById('theme_info_display').style.display = 'none';
+    }
+
+    // 更新主题详情展示
+    function updateQuickThemeDetails(themeName) {
+        const topic = topicsMap[themeName];
+        if (topic) {
+            document.getElementById('detail_theme_id').textContent = topic.theme_id || '-';
+            document.getElementById('detail_owner').textContent = topic.owner || '-';
+            document.getElementById('detail_method').textContent = topic.method || '-';
+            document.getElementById('detail_frequency').textContent = topic.frequency || '-';
+            document.getElementById('detail_level1').textContent = topic.level1 || '-';
+            document.getElementById('detail_level2').textContent = topic.level2 || '-';
+            document.getElementById('theme_info_display').style.display = 'block';
+        } else {
+            document.getElementById('theme_info_display').style.display = 'none';
+        }
+    }
+
+    // 快速添加主题函数
+    function quickAddTheme(contract, service) {
+        // 设置表单隐藏字段
+        document.getElementById('quick_c_name').value = contract;
+        document.getElementById('quick_s_content').value = service;
+
+        // 显示合同和服务信息
+        document.getElementById('quick_contract_display').textContent = contract;
+        document.getElementById('quick_service_display').textContent = service;
+
+        // 重置筛选器
+        resetQuickFilters();
+
+        // 显示模态框
+        const modalEl = document.getElementById('quickAddModal');
+        if (typeof bootstrap !== 'undefined') {
+            const myModal = bootstrap.Modal.getOrCreateInstance(modalEl);
+            myModal.show();
+        }
+    }
+
+    // 删除合同确认函数
+    function confirmDeleteContract(name) {
+        document.getElementById('del_contract_display').innerText = name;
+        document.getElementById('del_contract_input').value = name;
+        const modalEl = document.getElementById('deleteContractModal');
+        const myModal = bootstrap.Modal.getOrCreateInstance(modalEl);
+        myModal.show();
+    }
+
+    // DOM加载完成后初始化
+    document.addEventListener('DOMContentLoaded', function() {
+        console.log("Service Mapping JS Loaded.");
+
+        // 初始化快速筛选器
+        initQuickFilters();
+
+        // 监听快速关联模态框的显示事件
+        const quickAddModal = document.getElementById('quickAddModal');
+        if (quickAddModal) {
+            quickAddModal.addEventListener('show.bs.modal', function() {
+                // 模态框显示时重置筛选器
+                resetQuickFilters();
+            });
+
+            quickAddModal.addEventListener('shown.bs.modal', function() {
+                // 模态框完全显示后，焦点放到一级主题下拉框
+                const level1Select = document.getElementById('quick_level1');
+                if (level1Select) level1Select.focus();
+            });
+        }
+
+        // 页面展开逻辑
+        const urlParams = new URLSearchParams(window.location.search);
+        const expandContract = urlParams.get('expand_contract') || '';
+        const expandService = urlParams.get('expand_service') || '';
+
+        console.log("展开参数:", { contract: expandContract, service: expandService });
+
+        if (expandContract) {
+            setTimeout(() => {
+                const contractHeaders = document.querySelectorAll('.contract-title-text');
+                contractHeaders.forEach(header => {
+                    if (header.innerText.trim() === expandContract) {
+                        console.log("找到合同标题:", expandContract);
+                        const contractButton = header.closest('.accordion-button');
+                        if (contractButton) {
+                            const targetId = contractButton.getAttribute('data-bs-target');
+                            const contractCollapse = document.querySelector(targetId);
+
+                            if (contractCollapse) {
+                                const bsCollapse = new bootstrap.Collapse(contractCollapse, { show: true });
+
+                                bsCollapse._element.addEventListener('shown.bs.collapse', function() {
+                                    if (expandService) {
+                                        console.log("寻找服务项:", expandService);
+                                        const serviceElements = contractCollapse.querySelectorAll('.accordion-item .text-primary');
+                                        serviceElements.forEach(span => {
+                                            if (span.innerText.trim().includes(expandService)) {
+                                                const serviceButton = span.closest('.accordion-button');
+                                                if (serviceButton) {
+                                                    const serviceTargetId = serviceButton.getAttribute('data-bs-target');
+                                                    const serviceCollapse = document.querySelector(serviceTargetId);
+                                                    if (serviceCollapse) {
+                                                        new bootstrap.Collapse(serviceCollapse, { show: true });
+                                                        setTimeout(() => {
+                                                            serviceButton.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                                                        }, 100);
+                                                    }
+                                                }
+                                            }
+                                        });
+                                    }
+                                });
+                            }
+                        }
+                    }
+                });
+            }, 300);
+        }
+    });
+
+    // 主题数据映射（从模板变量生成）
+    {% if all_topics %}
+    const allTopicsData = [
+        {% for topic in all_topics %}
+        {
+            id: {{ topic.id }},
+            name: {{ topic.name | tojson }},
+            theme_id: {{ topic.theme_id | tojson }},
+            level1: {{ topic.level1_id | tojson }},
+            level2: {{ topic.level2_id | tojson }},
+            owner: {{ topic.owner | tojson }},
+            method: {{ topic.method | tojson }},
+            frequency: {{ topic.frequency | tojson }}
+        }{% if not loop.last %},{% endif %}
+        {% endfor %}
+    ];
+
+    // 主题映射，用于快速查找
+    const topicsMap = {};
+    allTopicsData.forEach(topic => {
+        topicsMap[topic.name] = topic;
+    });
+
+    console.log("主题数据加载完成，共", allTopicsData.length, "条");
+    {% else %}
+    console.warn("未获取到主题数据");
+    const allTopicsData = [];
+    const topicsMap = {};
+    {% endif %}
+</script>
+
+<script>
+    // --- 合同筛选逻辑 ---
+    function filterContracts() {
+        var sCode = document.getElementById('filterCode').value.toLowerCase().trim();
+        var sPA = document.getElementById('filterPA').value.toLowerCase().trim();
+        var sPB = document.getElementById('filterPB').value.toLowerCase().trim();
+
+        var select = document.getElementById('contractSelect');
+        var options = select.getElementsByTagName('option');
+        var visibleCount = 0;
+
+        for (var i = 1; i < options.length; i++) {
+            var opt = options[i];
+            var code = (opt.getAttribute('data-code') || '').toLowerCase();
+            var pa = (opt.getAttribute('data-pa') || '').toLowerCase();
+            var pb = (opt.getAttribute('data-pb') || '').toLowerCase();
+            var name = opt.text.toLowerCase();
+
+            var matchCode = !sCode || code.includes(sCode) || name.includes(sCode);
+            var matchPA = !sPA || pa.includes(sPA);
+            var matchPB = !sPB || pb.includes(sPB);
+
+            if (matchCode && matchPA && matchPB) {
+                opt.style.display = "";
+                visibleCount++;
+            } else {
+                opt.style.display = "none";
+            }
+        }
+
+        var msgDiv = document.getElementById('matchCountMsg');
+        msgDiv.textContent = (sCode || sPA || sPB) ? `匹配到 ${visibleCount} 个合同` : "";
+    }
+
+    // --- 主题筛选逻辑 ---
+    function pickTopic(selectObj) {
+        if (selectObj.value) {
+            document.getElementById('themeNameInput').value = selectObj.value;
+        }
+    }
+
+    function filterTopics() {
+        var sTID = document.getElementById('filterTID').value.toLowerCase().trim();
+        var sL1 = document.getElementById('filterL1').value.toLowerCase().trim();
+        var sL2 = document.getElementById('filterL2').value.toLowerCase().trim();
+
+        var select = document.getElementById('topicHelperSelect');
+        var options = select.getElementsByTagName('option');
+        var visibleCount = 0;
+
+        for (var i = 1; i < options.length; i++) {
+            var opt = options[i];
+            var tid = (opt.getAttribute('data-tid') || '').toLowerCase();
+            var l1 = (opt.getAttribute('data-l1') || '').toLowerCase();
+            var l2 = (opt.getAttribute('data-l2') || '').toLowerCase();
+            var name = opt.text.toLowerCase();
+
+            var matchTID = !sTID || tid.includes(sTID);
+            var matchL1 = !sL1 || l1.includes(sL1);
+            var matchL2 = !sL2 || l2.includes(sL2);
+
+            // 修复后的名字模糊匹配逻辑
+            var matchName = (sTID && name.includes(sTID)) ||
+                            (sL1 && name.includes(sL1)) ||
+                            (sL2 && name.includes(sL2));
+
+            if ((matchTID && matchL1 && matchL2) || matchName) {
+                opt.style.display = "";
+                visibleCount++;
+            } else {
+                opt.style.display = "none";
+            }
+        }
+
+        var msgDiv = document.getElementById('topicMatchMsg');
+        if (sTID || sL1 || sL2) {
+            msgDiv.textContent = `找到 ${visibleCount} 个`;
+            select.size = visibleCount > 3 ? 5 : (visibleCount < 2 ? 2 : visibleCount + 1);
+        } else {
+            msgDiv.textContent = "";
+            select.size = 5;
+        }
+    }
+</script>
+{% endblock %}

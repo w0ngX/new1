@@ -1,0 +1,158 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-10">
+        <div class="card shadow-sm">
+            <div class="card-header bg-primary text-white">
+                <h5 class="mb-0">{% if contract %}管理合同{% else %}新增合同{% endif %}</h5>
+            </div>
+            <div class="card-body">
+                <form method="POST" enctype="multipart/form-data">
+
+                    <h6 class="border-bottom pb-2 mb-3">基本信息</h6>
+                    <div class="row mb-3">
+                        <div class="col-md-3">
+                            <label class="form-label">合同编号</label>
+                            <input type="text" name="contract_code" class="form-control" value="{{ contract.contract_code if contract else '' }}">
+                        </div>
+                        <div class="col-md-9">
+                            <label class="form-label">合同名称</label>
+                            <input type="text" name="name" class="form-control" required value="{{ contract.name if contract else '' }}">
+                        </div>
+                    </div>
+
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <label class="form-label">合同类型</label>
+                            <input type="text" name="contract_type" class="form-control"
+                                   list="existingTypes"
+                                   placeholder="可直接输入新类型或选择已有..."
+                                   value="{{ contract.contract_type if contract else '' }}">
+
+                            <datalist id="existingTypes">
+                                {% for t in all_types %}
+                                <option value="{{ t }}">
+                                {% endfor %}
+                            </datalist>
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label">所屬年度</label>
+                            <input type="number" name="year" class="form-control" placeholder="如：2025"
+                                   value="{{ contract.year if contract else '' }}">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">甲方单位</label>
+                            <input type="text" name="party_a" class="form-control" value="{{ contract.party_a if contract else '' }}">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">乙方单位</label>
+                            <input type="text" name="party_b" class="form-control" value="{{ contract.party_b if contract else '' }}">
+                        </div>
+                    </div>
+
+                    <h6 class="border-bottom pb-2 mb-3 mt-4">财务与周期</h6>
+                    <div class="row mb-3">
+                        <div class="col-md-3">
+                            <label class="form-label">合同总金额</label>
+                            <input type="number" step="0.01" name="amount" class="form-control" value="{{ contract.amount if contract else '0' }}">
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label fw-bold text-primary">当前余额 (可编辑)</label>
+                            <input type="number" step="0.01" name="balance" class="form-control border-primary" value="{{ contract.balance if contract else '0.0' }}">
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label">签约日期</label>
+                            <input type="date" name="sign_date" class="form-control" value="{{ contract.sign_date if contract else '' }}">
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label">履约截止日期</label>
+                            <input type="date" name="end_date" class="form-control" value="{{ contract.end_date if contract else '' }}">
+                            <div class="form-text">用于自动判断状态 (当前界限: 2023-01-01)</div>
+                        </div>
+                    </div>
+
+                    <h6 class="border-bottom pb-2 mb-3 mt-4">扫描件管理</h6>
+                        <div class="mb-3">
+                            <div class="card border-secondary-subtle">
+                                <div class="card-body bg-light bg-opacity-10">
+                                    <div class="mb-3">
+                                        <label class="small text-muted fw-bold">方案 A：上传本地文件</label>
+                                        <input type="file" name="scan_file" class="form-control form-control-sm">
+
+                                        {% if contract and contract.scan_file and not contract.scan_file.startswith('http') %}
+                                            <div id="file-display-{{ contract.id }}" class="mt-1 small d-flex align-items-center">
+                                                <span class="text-success">
+                                                    <i class="bi bi-file-earmark-check"></i>
+                                                    服务器已存文件：
+                                                    <a href="{{ url_for('uploaded_file', filename=contract.scan_file) }}" target="_blank" class="text-decoration-none">{{ contract.scan_file }}</a>
+                                                </span>
+                                                <button type="button" class="btn btn-link text-danger p-0 ms-2"
+                                                        onclick="deleteServerFile({{ contract.id }})" title="从服务器永久删除">
+                                                    <i class="bi bi-x-circle-fill"></i> 删除
+                                                </button>
+                                            </div>
+                                        {% endif %}
+                                    </div>
+
+                                    <div class="text-center my-2">
+                                        <span class="badge bg-secondary opacity-50">OR</span>
+                                    </div>
+
+                                    <div class="mb-0">
+                                        <label class="small text-muted fw-bold">方案 B：外部链接 (如网盘、协作文档链接)</label>
+                                        {# 逻辑修正：只有当 scan_file 确实以 http 开头时才填入 value #}
+                                        <input type="url" name="scan_link" class="form-control form-control-sm"
+                                               placeholder="https://..."
+                                               value="{% if contract and contract.scan_file and contract.scan_file.startswith('http') %}{{ contract.scan_file }}{% endif %}">
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="form-text">
+                                <i class="bi bi-info-circle"></i>
+                                提示：若同时操作，系统将优先保存<strong>新上传的文件</strong>。
+                            </div>
+                        </div>
+
+                    <hr>
+                    <div class="d-flex justify-content-end gap-2">
+                        <a href="{{ url_for('contracts') }}" class="btn btn-secondary">取消</a>
+                        <button type="submit" class="btn btn-success px-4">保存所有更改</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+<script>
+function deleteServerFile(contractId) {
+    if (!confirm("确定要从服务器永久删除该扫描件吗？此操作不可恢复。")) {
+        return;
+    }
+
+    fetch(`/contract/${contractId}/delete_file`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.status === 'success') {
+            // 隐藏显示文件信息的 div
+            const displayDiv = document.getElementById(`file-display-${contractId}`);
+            if (displayDiv) {
+                displayDiv.innerHTML = '<span class="text-muted italic">文件已删除</span>';
+            }
+            alert(data.message);
+        } else {
+            alert("错误: " + data.message);
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert("网络错误，请稍后再试");
+    });
+}
+</script>
+{% endblock %}

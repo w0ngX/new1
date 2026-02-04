@@ -1,0 +1,560 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="mb-4">
+    <h3>欢迎回来，{{ current_user.username }}！</h3>
+    <p class="text-muted">这是系统目前的数据概况。</p>
+</div>
+<div class="row justify-content-center mb-4 mt-5">
+    <div class="col-md-8">
+        <div class="text-center mb-3">
+            <h2 class="mb-3">👋 您好，我是您的数据助手</h2>
+        </div>
+
+        <div class="input-group input-group-lg shadow-sm mb-3">
+            <span class="input-group-text bg-white border-end-0">
+                <i class="bi bi-robot text-primary"></i>
+            </span>
+            <input type="text" class="form-control border-start-0"
+                   id="dashInput"
+                   placeholder="在此直接提问，结果将显示在下方..."
+                   onkeypress="handleDashEnter(event)">
+            <button class="btn btn-primary px-4" type="button" onclick="startDashSearch()">
+                <i class="bi bi-search"></i> 查询
+            </button>
+        </div>
+
+        <div id="dashResultCard" class="card shadow-sm border-0 bg-light" style="display: none;">
+            <div class="card-header bg-white border-bottom-0 d-flex justify-content-between align-items-center">
+                <strong class="text-primary"><i class="bi bi-stars"></i> AI 回答：</strong>
+                <button class="btn btn-sm btn-link text-muted text-decoration-none" onclick="closeDashResult()">
+                    <i class="bi bi-x-lg"></i> 关闭
+                </button>
+            </div>
+            <div class="card-body">
+                <div id="dashOutput" class="text-dark" style="line-height: 1.6; font-size: 1.05rem;"></div>
+
+                <div id="dashLoading" class="mt-2 text-muted small" style="display: none;">
+                    <span class="spinner-border spinner-border-sm" role="status"></span> 正在思考中...
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    function handleDashEnter(e) {
+        if (e.key === 'Enter') startDashSearch();
+    }
+
+    function closeDashResult() {
+        document.getElementById('dashResultCard').style.display = 'none';
+        document.getElementById('dashInput').value = '';
+    }
+
+    async function startDashSearch() {
+        const input = document.getElementById('dashInput');
+        const output = document.getElementById('dashOutput');
+        const card = document.getElementById('dashResultCard');
+        const loading = document.getElementById('dashLoading');
+
+        const query = input.value.trim();
+        if (!query) return;
+
+        // 1. 初始化界面状态
+        card.style.display = 'block'; // 显示结果卡片
+        output.innerHTML = '';        // 清空旧内容
+        loading.style.display = 'block'; // 显示加载中
+
+        // 2. 发起请求 (与悬浮球使用同一个后端接口)
+        try {
+            const response = await fetch('/api/ai_query', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ query: query })
+            });
+
+            // 3. 准备读取流
+            const reader = response.body.getReader();
+            const decoder = new TextDecoder("utf-8");
+            let fullText = "";
+
+            // 隐藏 loading，开始显示文字
+            loading.style.display = 'none';
+
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+
+                const chunk = decoder.decode(value, { stream: true });
+                const lines = chunk.split('\n');
+
+                for (const line of lines) {
+                    if (line.startsWith('data: ')) {
+                        const jsonStr = line.slice(6);
+                        if (jsonStr.trim() === '[DONE]') break;
+
+                        try {
+                            const data = JSON.parse(jsonStr);
+                            if (data.text) {
+                                fullText += data.text;
+                                // 简单换行处理
+                                output.innerHTML = fullText.replace(/\n/g, '<br>');
+                            }
+                        } catch (e) { console.error(e); }
+                    }
+                }
+            }
+
+        } catch (err) {
+            loading.style.display = 'none';
+            output.innerHTML = `<span class="text-danger">查询出错: ${err.message}</span>`;
+        }
+    }
+</script>
+<div class="row mt-4">
+    <div class="col-12">
+        <div class="card bg-light border-0">
+            <div class="card-body d-flex justify-content-between align-items-center">
+                <span class="fw-bold text-muted">🚀 快速操作入口：</span>
+                <div>
+                    <a href="{{ url_for('edit_contract', id=0) }}" class="btn btn-sm btn-primary rounded-pill px-3 me-2">+ 新增合同</a>
+                    <a href="{{ url_for('edit_topic', id=0) }}" class="btn btn-sm btn-success rounded-pill px-3 me-2">+ 新增主题</a>
+                    <a href="{{ url_for('edit_task', id=0) }}" class="btn btn-sm btn-warning rounded-pill px-3 me-2">+ 新增服务</a>
+                    <a href="{{ url_for('service_mapping', action='add') }}" class="btn btn-sm btn-info text-white rounded-pill px-3 me-2">
+                        <i class="bi bi-diagram-3"></i> 新增对应关系
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+
+<!-- ================= 合同状态分析 ================= -->
+<div class="row mt-2">
+    <div class="col-md-12">
+        <div class="card shadow-sm border-0 h-100">
+            <div class="card-header bg-white py-3">
+                <h5 class="mb-0"><i class="bi bi-pie-chart-fill text-primary me-2"></i>合同模块分析</h5>
+            </div>
+            <div class="card-body">
+                <div class="row align-items-center">
+                    <div class="col-md-4">
+                        <div class="d-flex justify-content-between">
+                            <h6 class="fw-bold mb-3">履约中合同占比</h6>
+                            <span class="fw-bold ">总计 {{ total_contracts }} 份合同</span>
+                        </div>
+
+                        <div class="mt-4">
+                            <div class="d-flex justify-content-between mb-2">
+                                <span class="text-success">
+                                    <i class="bi bi-caret-up-fill me-1"></i> 履约中
+                                </span>
+                                <span class="fw-bold text-success">{{ active_contracts }} 份</span>
+                            </div>
+                            <!--<div class="progress" style="height: 10px;">
+                                <div class="progress-bar bg-success" role="progressbar"
+                                     style="width: {{ active_percent }}%"></div>
+                            </div>-->
+                            <div class="d-flex justify-content-between mb-2">
+                                <span class="text-secondary">
+                                    <i class="bi bi-check-circle-fill me-1"></i> 已结束
+                                </span>
+                                <span class="fw-bold text-secondary">{{ ended_contracts }} 份</span>
+                            </div>
+                            <!--<div class="progress" style="height: 10px;">
+                                <div class="progress-bar bg-secondary" role="progressbar"
+                                     style="width: {{ ended_percent }}%"></div>
+                            </div>-->
+                        </div>
+                    </div>
+
+                    <div class="col-md-4">
+                        <div class="border-start ps-4">
+                            <div class="mb-3">
+                                <div class="d-flex justify-content-between">
+                                    <h6 class="fw-bold mb-3">合同金额分布</h6>
+                                    <span class="fw-bold ">{{ unsettled_count }}/{{ total_contracts }} 份合同待付</span>
+                                </div>
+                            </div>
+                            <div class="mb-3">
+                                <div class="d-flex justify-content-between">
+                                    <span>合同总金额</span>
+                                    <span class=" text-muted">¥{{ "{:,.2f}".format(total_amount) }}</span>
+                                </div>
+                            </div>
+                            <div class="mb-3">
+                                <div class="d-flex justify-content-between">
+                                    <span class="text-danger">待结算金额</span>
+                                    <span class="fw-bold text-danger">¥{{ "{:,.2f}".format(unsettled_amount) }}</span>
+                                </div>
+                            </div>
+
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+</div>
+
+<!-- ================= 重点税务合同监控（统一模块） ================= -->
+<div class="row mt-4">
+    <div class="col-12">
+        <div class="card shadow-sm border-0">
+            <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center">
+                <div>
+                    <h5 class="mb-0">
+                        <i class="bi bi-search-heart text-info me-2"></i>
+                        重点税务合同监控
+                        <small class="text-muted" id="contract-type-label">(全部税务合同且履约中)</small>
+                    </h5>
+                </div>
+                <div class="d-flex align-items-center">
+                    <!-- 切换开关 -->
+                    <div class="btn-group btn-group-sm me-3" role="group">
+                        <input type="radio" class="btn-check" name="contract-type" id="all-type" autocomplete="off" checked onclick="switchContractType('all')">
+                        <label class="btn btn-outline-primary" for="all-type">全部</label>
+
+                        <input type="radio" class="btn-check" name="contract-type" id="jsb-type" autocomplete="off" onclick="switchContractType('jsb')">
+                        <label class="btn btn-outline-primary" for="jsb-type">极数宝</label>
+
+                        <input type="radio" class="btn-check" name="contract-type" id="mf-type" autocomplete="off" onclick="switchContractType('mf')">
+                        <label class="btn btn-outline-primary" for="mf-type">蚂蜂</label>
+                    </div>
+
+                    <span class="badge bg-info bg-opacity-10 text-info px-3 py-2" id="contract-count-badge">
+                        <i class="bi bi-file-earmark-text me-1"></i>
+                        <span id="contract-count">{{ important_count }}</span> 份
+                    </span>
+                </div>
+            </div>
+
+            <div class="card-body p-0">
+                <!-- 全部税务合同表格 -->
+                <div id="all-table-section" class="contract-table-section">
+                    <div class="table-responsive" style="max-height: 400px; overflow-y: auto;">
+                        <table class="table table-hover mb-0">
+                            <thead style="position: sticky; top: 0; z-index: 10; background-color: #f8f9fa;">
+                                <tr class="table-light">
+                                    <th class="border-0 ps-4" style="width: 15%;">合同编号</th>
+                                    <th class="border-0" style="width: 35%;">合同名称</th>
+                                    <th class="border-0" style="width: 20%;">甲方单位</th>
+                                    <th class="border-0" style="width: 20%;">类型</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% if important_contracts %}
+                                    {% for c in important_contracts %}
+                                    <tr class="align-middle">
+                                        <td class="ps-4">
+                                            <span class="fw-semibold">{{ c.contract_code or '未编号' }}</span>
+                                        </td>
+                                        <td>
+                                            <div class="d-flex align-items-center">
+                                                <a href="{{ url_for('edit_contract', id=c.id) }}"
+                                                   class="text-decoration-none text-dark hover-primary">
+                                                    {{ c.name|truncate(40) }}
+                                                </a>
+                                            </div>
+                                        </td>
+                                        <td>
+                                            <span class="text-muted">{{ c.party_a|default('未填写', true)|truncate(25) }}</span>
+                                        </td>
+                                        <td>
+                                            {% if c.party_b and '蚂蜂' in c.party_b %}
+                                                <span class="badge bg-warning bg-opacity-10 text-warning">蚂蜂</span>
+                                            {% elif c.party_b and '极数宝' in c.party_b %}
+                                                <span class="badge bg-primary bg-opacity-10 text-primary">极数宝</span>
+                                            {% else %}
+                                                <span class="badge bg-info bg-opacity-10 text-info">税务</span>
+                                            {% endif %}
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
+                                {% else %}
+                                    <tr>
+                                        <td colspan="4" class="text-center py-5 text-muted">
+                                            <i class="bi bi-inbox fs-1 opacity-50"></i>
+                                            <p class="mt-2">暂无符合条件的税务合同</p>
+                                            <a href="{{ url_for('contracts') }}" class="btn btn-sm btn-outline-primary mt-2">
+                                                查看所有合同
+                                            </a>
+                                        </td>
+                                    </tr>
+                                {% endif %}
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <!-- 全部合同底部统计信息 -->
+                    {% if important_contracts %}
+                    <div class="border-top bg-light px-4 py-3">
+                        <div class="row">
+                            <div class="col-md-4">
+                                <small class="text-muted">
+                                    <i class="bi bi-info-circle me-1"></i>
+                                    支持鼠标滚动查看
+                                </small>
+                            </div>
+                            <div class="col-md-8 text-end">
+                                <small class="text-muted">
+                                    <span class="me-3">
+                                        总金额: <strong>¥{{ "{:,.2f}".format(important_contracts|sum(attribute='amount')) }}</strong>
+                                    </span>
+                                    <span>
+                                        平均金额: <strong>¥{{ "{:,.2f}".format((important_contracts|sum(attribute='amount'))/important_count if important_count > 0 else 0) }}</strong>
+                                    </span>
+                                </small>
+                            </div>
+                        </div>
+                    </div>
+                    {% endif %}
+                </div>
+
+                <!-- 极数宝合同表格 -->
+                <div id="jsb-table-section" class="contract-table-section" style="display: none;">
+                    <div class="table-responsive" style="max-height: 400px; overflow-y: auto;">
+                        <table class="table table-hover mb-0">
+                            <thead style="position: sticky; top: 0; z-index: 10; background-color: #f8f9fa;">
+                                <tr class="table-light">
+                                    <th class="border-0 ps-4" style="width: 15%;">合同编号</th>
+                                    <th class="border-0" style="width: 35%;">合同名称</th>
+                                    <th class="border-0" style="width: 20%;">甲方单位</th>
+                                    <th class="border-0" style="width: 20%;">类型</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% if jsb_contracts %}
+                                    {% for c in jsb_contracts %}
+                                    <tr class="align-middle">
+                                        <td class="ps-4">
+                                            <span class="fw-semibold">{{ c.contract_code or '未编号' }}</span>
+                                        </td>
+                                        <td>
+                                            <div class="d-flex align-items-center">
+                                                <a href="{{ url_for('edit_contract', id=c.id) }}"
+                                                   class="text-decoration-none text-dark hover-primary">
+                                                    {{ c.name|truncate(40) }}
+                                                </a>
+                                            </div>
+                                        </td>
+                                        <td>
+                                            <span class="text-muted">{{ c.party_a|default('未填写', true)|truncate(25) }}</span>
+                                        </td>
+                                        <td>
+                                            <span class="badge bg-primary bg-opacity-10 text-primary">极数宝</span>
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
+                                {% else %}
+                                    <tr>
+                                        <td colspan="4" class="text-center py-5 text-muted">
+                                            <i class="bi bi-inbox fs-1 opacity-50"></i>
+                                            <p class="mt-2">暂无符合条件的极数宝合同</p>
+                                            <a href="{{ url_for('contracts') }}" class="btn btn-sm btn-outline-primary mt-2">
+                                                查看所有合同
+                                            </a>
+                                        </td>
+                                    </tr>
+                                {% endif %}
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <!-- 极数宝底部统计信息 -->
+                    {% if jsb_contracts %}
+                    <div class="border-top bg-light px-4 py-3">
+                        <div class="row">
+                            <div class="col-md-4">
+                                <small class="text-muted">
+                                    <i class="bi bi-info-circle me-1"></i>
+                                    支持鼠标滚动查看
+                                </small>
+                            </div>
+                            <div class="col-md-8 text-end">
+                                <small class="text-muted">
+                                    <span class="me-3">
+                                        总金额: <strong>¥{{ "{:,.2f}".format(jsb_contracts|sum(attribute='amount')) }}</strong>
+                                    </span>
+                                    <span>
+                                        平均金额: <strong>¥{{ "{:,.2f}".format((jsb_contracts|sum(attribute='amount'))/jsb_count if jsb_count > 0 else 0) }}</strong>
+                                    </span>
+                                </small>
+                            </div>
+                        </div>
+                    </div>
+                    {% endif %}
+                </div>
+
+                <!-- 蚂蜂合同表格 -->
+                <div id="mf-table-section" class="contract-table-section" style="display: none;">
+                    <div class="table-responsive" style="max-height: 400px; overflow-y: auto;">
+                        <table class="table table-hover mb-0">
+                            <thead style="position: sticky; top: 0; z-index: 10; background-color: #f8f9fa;">
+                                <tr class="table-light">
+                                    <th class="border-0 ps-4" style="width: 15%;">合同编号</th>
+                                    <th class="border-0" style="width: 35%;">合同名称</th>
+                                    <th class="border-0" style="width: 20%;">甲方单位</th>
+                                    <th class="border-0" style="width: 20%;">类型</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% if mf_contracts %}
+                                    {% for c in mf_contracts %}
+                                    <tr class="align-middle">
+                                        <td class="ps-4">
+                                            <span class="fw-semibold">{{ c.contract_code or '未编号' }}</span>
+                                        </td>
+                                        <td>
+                                            <div class="d-flex align-items-center">
+                                                <a href="{{ url_for('edit_contract', id=c.id) }}"
+                                                   class="text-decoration-none text-dark hover-primary">
+                                                    {{ c.name|truncate(40) }}
+                                                </a>
+                                            </div>
+                                        </td>
+                                        <td>
+                                            <span class="text-muted">{{ c.party_a|default('未填写', true)|truncate(25) }}</span>
+                                        </td>
+                                        <td>
+                                            <span class="badge bg-warning bg-opacity-10 text-warning">蚂蜂</span>
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
+                                {% else %}
+                                    <tr>
+                                        <td colspan="4" class="text-center py-5 text-muted">
+                                            <i class="bi bi-inbox fs-1 opacity-50"></i>
+                                            <p class="mt-2">暂无符合条件的蚂蜂合同</p>
+                                            <a href="{{ url_for('contracts') }}" class="btn btn-sm btn-outline-primary mt-2">
+                                                查看所有合同
+                                            </a>
+                                        </td>
+                                    </tr>
+                                {% endif %}
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <!-- 蚂蜂底部统计信息 -->
+                    {% if mf_contracts %}
+                    <div class="border-top bg-light px-4 py-3">
+                        <div class="row">
+                            <div class="col-md-4">
+                                <small class="text-muted">
+                                    <i class="bi bi-info-circle me-1"></i>
+                                    支持鼠标滚动查看
+                                </small>
+                            </div>
+                            <div class="col-md-8 text-end">
+                                <small class="text-muted">
+                                    <span class="me-3">
+                                        总金额: <strong>¥{{ "{:,.2f}".format(mf_contracts|sum(attribute='amount')) }}</strong>
+                                    </span>
+                                    <span>
+                                        平均金额: <strong>¥{{ "{:,.2f}".format((mf_contracts|sum(attribute='amount'))/mf_count if mf_count > 0 else 0) }}</strong>
+                                    </span>
+                                </small>
+                            </div>
+                        </div>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 切换合同类型的JavaScript -->
+<script>
+    function switchContractType(type) {
+        // 切换标签文本
+        const label = document.getElementById('contract-type-label');
+        const countBadge = document.getElementById('contract-count');
+
+        if (type === 'all') {
+            label.textContent = '(全部税务合同且履约中)';
+            countBadge.textContent = '{{ important_count }}';
+
+            // 显示全部表格，隐藏其他表格
+            document.getElementById('all-table-section').style.display = 'block';
+            document.getElementById('jsb-table-section').style.display = 'none';
+            document.getElementById('mf-table-section').style.display = 'none';
+        } else if (type === 'jsb') {
+            label.textContent = '(极数宝且履约中)';
+            countBadge.textContent = '{{ jsb_count }}';
+
+            // 显示极数宝表格，隐藏其他表格
+            document.getElementById('all-table-section').style.display = 'none';
+            document.getElementById('jsb-table-section').style.display = 'block';
+            document.getElementById('mf-table-section').style.display = 'none';
+        } else if (type === 'mf') {
+            label.textContent = '(蚂蜂且履约中)';
+            countBadge.textContent = '{{ mf_count }}';
+
+            // 显示蚂蜂表格，隐藏其他表格
+            document.getElementById('all-table-section').style.display = 'none';
+            document.getElementById('jsb-table-section').style.display = 'none';
+            document.getElementById('mf-table-section').style.display = 'block';
+        }
+    }
+</script>
+
+<!-- 添加一些自定义样式 -->
+<style>
+    .hover-primary:hover {
+        color: #0d6efd !important;
+    }
+
+    /* 美化滚动条 */
+    .table-responsive::-webkit-scrollbar {
+        width: 6px;
+        height: 6px;
+    }
+
+    .table-responsive::-webkit-scrollbar-track {
+        background: #f1f1f1;
+        border-radius: 3px;
+    }
+
+    .table-responsive::-webkit-scrollbar-thumb {
+        background: #c1c1c1;
+        border-radius: 3px;
+    }
+
+    .table-responsive::-webkit-scrollbar-thumb:hover {
+        background: #a8a8a8;
+    }
+
+    /* 表格行悬停效果 */
+    .table-hover tbody tr:hover {
+        background-color: rgba(13, 110, 253, 0.05);
+    }
+
+    /* 固定表头阴影 */
+    thead.table-light {
+        box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+    }
+
+    /* 合同类型切换按钮样式 */
+    .btn-group .btn-outline-primary.active {
+        background-color: #0d6efd;
+        color: white;
+        border-color: #0d6efd;
+    }
+
+    .contract-table-section {
+        transition: opacity 0.3s ease;
+    }
+
+    /* 类型标签样式 */
+    .badge {
+        font-size: 0.75rem;
+        padding: 0.25rem 0.5rem;
+    }
+</style>
+
+{% endblock %}
